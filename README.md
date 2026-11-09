@@ -73,7 +73,7 @@ Typical use cases: a headless home server sharing a Zigbee/Z‑Wave dongle, a la
 **Easy solution — detach from the console.** The simplest fix is to open the web console on the **client** and detach the affected device with one click:
 
 1. Open **`http://localhost:8098`** (or **`http://127.0.0.1:8098`**) on the client — see [Section 11](#11-starting-and-using-the-web-console).
-2. Find the device still shown as **attached** in the device list.
+2. Find the device in the device list.
 3. Click **Detach** next to that device.
 
 The port is released immediately and the device can be re‑attached once the server and tunnel are back. No reboot and no kernel module reload is needed.
