@@ -124,7 +124,7 @@ Full procedure and diagnostics: [Section 13.6](#136-stale-vhci_hcd-attach-after-
 
 ## 5. Requirements
 
-* **Ubuntu 22.04 / 24.04** (or a comparable Debian derivative) with `systemd`.
+* **Ubuntu 26.04** (or a comparable Debian derivative) with `systemd`.
 * A kernel that ships the USB/IP modules: `usbip-core`, `usbip-host`, `vhci-hcd`, `usbip-vudc`.
 * `linux-tools-common` + `linux-tools-generic` (provides `/usr/bin/usbip` and `usbipd`).
 * `python3-fastapi`, `python3-uvicorn`, `python3-pydantic`.
