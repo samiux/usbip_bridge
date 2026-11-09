@@ -7,7 +7,7 @@ A self‑hosted control plane for **USB/IP** on Linux. Share USB devices from a 
 │            SERVER             │  ══════════════════════════════════════►  │            CLIENT             │
 │                               │        usbip-tunnel.service               │                               │
 │  USB devices (lsusb)          │                                           │  vhci_hcd (virtual host)      │
-│  usbipd            (TCP 3240) │  ◄────── USB/IP over loopback ──────►    │  usbip attach                 │
+│  usbipd            (TCP 3240) │  ◄────── USB/IP over loopback ──────►     │  usbip attach                 │
 │  usbip-server.service         │                                           │  usbip-client.service         │
 │  99-usbip-hotplug.rules       │                                           │  usbip-tunnel-firewall.service│
 │  usbip-bridge.service         │                                           │  usbip-bridge.service         │
@@ -670,10 +670,10 @@ This is the [KI‑1 known issue](#21-known-issues): the client's `vhci_hcd` does
 **Quick fix — detach from the console.** The fastest way to release a stuck port is the web console on the client ([Section 11](#11-starting-and-using-the-web-console)):
 
 1. Open **`http://localhost:8098`** (or **`http://127.0.0.1:8098`**).
-2. Locate the device that still shows as **attached**.
+2. Locate the device.
 3. Click **Detach** next to it.
 
-The port is freed immediately. No reboot or module reload is needed.
+The port is freed immediately and the device will be attached back automatically. No reboot or module reload is needed.
 
 **Confirm the condition** (optional, for diagnosis):
 
@@ -890,21 +890,19 @@ Optionally remove the `usbip_host` / `usbip_core` / `usbip_vudc` / `vhci_hcd` li
 
 ## 16. License
 
-This project is licensed under the **GNU General Public License, version 3.0 or (at your option) any later version — GPL‑3.0‑or‑later**.
+This project is licensed under the **GNU General Public License, version 3.0**.
 
-You are free to use, study, share and modify the software under the terms of the GPL. Any distributed derivative work must also be licensed under the GPL‑3.0‑or‑later and must make the corresponding source code available.
+You are free to use, study, share and modify the software under the terms of the GPL. Any distributed derivative work must also be licensed under the GPL‑3.0 and must make the corresponding source code available.
 
-* SPDX identifier: **`GPL-3.0-or-later`**
+* SPDX identifier: **`GPL-3.0`**
 * Full license text: <https://www.gnu.org/licenses/gpl-3.0.txt>
 * License overview: <https://www.gnu.org/licenses/gpl-3.0.html>
 
 Include the license in the repository as `LICENSE` (or `COPYING`), and use the following header in source files:
 
 ```text
-SPDX-License-Identifier: GPL-3.0-or-later
+SPDX-License-Identifier: GPL-3.0
 Copyright (C) <year> <author>
 ```
-
-The “or later” wording lets recipients combine the code with future GPLv3‑compatible versions; if you must pin the license to v3.0 exactly, use `GPL-3.0-only` instead.
 
 > USB/IP itself is part of the Linux kernel and the `linux-tools` package; the `vhci_hcd` behaviour described in [KI‑1](#21-known-issues) is subject to the kernel's own licensing and upstream bug tracking.
