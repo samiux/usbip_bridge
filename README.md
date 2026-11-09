@@ -20,7 +20,7 @@ A self‑hosted control plane for USB/IP on Linux. Share USB devices from a serv
 Table of contents
 
 1. Overview
-2. Features
+2. Features       
    · 2.1 Known issues
 3. How it works
 4. Repository layout
