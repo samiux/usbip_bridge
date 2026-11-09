@@ -43,10 +43,10 @@ Table of contents
 
 USB/IP Bridge (Console) is a small set of scripts, systemd units and a FastAPI web application that turns the raw usbip toolchain into a manageable service:
 
-· The server exports local USB devices over USB/IP (usbipd, port 3240).
-· The client imports them through vhci_hcd and exposes them as if they were plugged in locally.
-· The USB/IP traffic is never exposed to the network: it travels over an SSH tunnel between the two hosts.
-· A web console runs on each side on port 8098 (Section 11) so you can see what is exported, what is attached, and whether the tunnel is healthy.
+· The server exports local USB devices over USB/IP (usbipd, port 3240).    
+· The client imports them through vhci_hcd and exposes them as if they were plugged in locally.    
+· The USB/IP traffic is never exposed to the network: it travels over an SSH tunnel between the two hosts.    
+· A web console runs on each side on port 8098 (Section 11) so you can see what is exported, what is attached, and whether the tunnel is healthy.    
 
 Typical use cases: a headless home server sharing a Zigbee/Z‑Wave dongle, a lab machine sharing a serial adapter or a license dongle, or a VM host sharing a USB programmer.
 
@@ -54,13 +54,13 @@ Typical use cases: a headless home server sharing a Zigbee/Z‑Wave dongle, a la
 
 2. Features
 
-· 🖥️ Web console — FastAPI + Uvicorn backend, static HTML frontend. Open it at http://localhost:8098 or http://127.0.0.1:8098 (Section 11).
-· 🔌 Hot‑plug aware — a udev rule (99-usbip-hotplug.rules) binds newly inserted devices automatically (Section 7).
-· 🧰 usbipctl helper — a single CLI for list/bind/unbind/attach/detach/status (Section 4).
-· 🔐 Key‑only SSH tunnel — the client's key is restricted to port forwarding; no shell, no PTY (Section 8, Section 9).
-· 🧱 Least privilege — the tunnel runs as the unprivileged system user usbip-tunnel (/sbin/nologin).
-· ♻️ systemd‑managed — server, client, tunnel and firewall are separate units (Section 4).
-· 🚫 No public USB/IP port — usbipd traffic stays on loopback inside the tunnel (Section 14).
+· 🖥️ Web console — FastAPI + Uvicorn backend, static HTML frontend. Open it at http://localhost:8098 or http://127.0.0.1:8098 (Section 11).    
+· 🔌 Hot‑plug aware — a udev rule (99-usbip-hotplug.rules) binds newly inserted devices automatically (Section 7).    
+· 🧰 usbipctl helper — a single CLI for list/bind/unbind/attach/detach/status (Section 4).    
+· 🔐 Key‑only SSH tunnel — the client's key is restricted to port forwarding; no shell, no PTY (Section 8, Section 9).    
+· 🧱 Least privilege — the tunnel runs as the unprivileged system user usbip-tunnel (/sbin/nologin).    
+· ♻️ systemd‑managed — server, client, tunnel and firewall are separate units (Section 4).    
+· 🚫 No public USB/IP port — usbipd traffic stays on loopback inside the tunnel (Section 14).    
 
 2.1 Known issues
 
@@ -71,8 +71,8 @@ KI‑1 — summary. When the server side disappears abruptly — network loss, u
 
 Easy solution — detach from the console. The simplest fix is to open the web console on the client and detach the affected device with one click:
 
-1. Open http://localhost:8098 (or http://127.0.0.1:8098) on the client — see Section 11.
-2. Find the device still shown as attached in the device list.
+1. Open http://localhost:8098 (or http://127.0.0.1:8098) on the client — see Section 11.    
+2. Find the device still shown as attached in the device list.    
 3. Click Detach next to that device.
 
 The port is released immediately and the device can be re‑attached once the server and tunnel are back. No reboot and no kernel module reload is needed.
@@ -94,11 +94,11 @@ Prevention. Prefer an orderly shutdown on the server (stop the export before tak
 
 3. How it works
 
-1. Hot‑plug (server). udev matches a new USB device and runs usbipctl, which binds the device to the usbip-host driver (Section 7).
-2. Export (server). usbip-server.service keeps usbipd running on TCP 3240, reachable only on loopback.
-3. Tunnel (client → server). usbip-tunnel.service opens a persistent SSH session as usbip-tunnel and forwards loopback port 3240. The server's authorized_keys entry allows only port forwarding (Section 9).
-4. Attach (client). usbip-client.service asks the local vhci_hcd driver to attach the remote bus ID via localhost:3240 (Section 8).
-5. Observe (both). usbip-bridge.service serves the web console on port 8098 plus a JSON API describing device, tunnel and service state (Section 11).
+1. Hot‑plug (server). udev matches a new USB device and runs usbipctl, which binds the device to the usbip-host driver (Section 7).    
+2. Export (server). usbip-server.service keeps usbipd running on TCP 3240, reachable only on loopback.    
+3. Tunnel (client → server). usbip-tunnel.service opens a persistent SSH session as usbip-tunnel and forwards loopback port 3240. The server's authorized_keys entry allows only port forwarding (Section 9).    
+4. Attach (client). usbip-client.service asks the local vhci_hcd driver to attach the remote bus ID via localhost:3240 (Section 8).    
+5. Observe (both). usbip-bridge.service serves the web console on port 8098 plus a JSON API describing device, tunnel and service state (Section 11).    
 
 ---
 
@@ -122,12 +122,12 @@ All commands below are run from the root of the cloned repository unless stated 
 
 5. Requirements
 
-· Ubuntu 22.04 / 24.04 (or a comparable Debian derivative) with systemd.
-· A kernel that ships the USB/IP modules: usbip-core, usbip-host, vhci-hcd, usbip-vudc.
-· linux-tools-common + linux-tools-generic (provides /usr/bin/usbip and usbipd).
-· python3-fastapi, python3-uvicorn, python3-pydantic.
-· openssh-server on the server, openssh-client on the client.
-· Root/sudo on both machines.
+· Ubuntu 22.04 / 24.04 (or a comparable Debian derivative) with systemd.    
+· A kernel that ships the USB/IP modules: usbip-core, usbip-host, vhci-hcd, usbip-vudc.    
+· linux-tools-common + linux-tools-generic (provides /usr/bin/usbip and usbipd).    
+· python3-fastapi, python3-uvicorn, python3-pydantic.    
+· openssh-server on the server, openssh-client on the client.    
+· Root/sudo on both machines.    
 
 ⚠️ usbip uses a versioned protocol. Run usbip version on both ends and keep them on the same major version (ideally the same Ubuntu release).
 
@@ -391,9 +391,9 @@ The tunnel is started before the client on purpose: usbip-client.service attache
 The tunnel is the only path between the two hosts. Three things must be true:
 
 # Requirement Where to check
-1 Client's key is in the server's authorized_keys server: /var/lib/usbip-tunnel/.ssh/authorized_keys (Section 7.6)
-2 Server's host key is in the client's known_hosts client: /var/lib/usbip-tunnel/.ssh/known_hosts (Section 8.8)
-3 Environment=SERVER_IP= points at the server client: /lib/systemd/system/usbip-tunnel.service (Section 8.9)
+1 Client's key is in the server's authorized_keys server: /var/lib/usbip-tunnel/.ssh/authorized_keys (Section 7.6)    
+2 Server's host key is in the client's known_hosts client: /var/lib/usbip-tunnel/.ssh/known_hosts (Section 8.8)    
+3 Environment=SERVER_IP= points at the server client: /lib/systemd/system/usbip-tunnel.service (Section 8.9)    
 
 Manual test (do this before debugging the units):
 
@@ -832,14 +832,14 @@ curl -s -o /dev/null -w 'console HTTP %{http_code}\n' http://localhost:8098/
 
 14. Security notes
 
-· No public USB/IP port. usbipd is reached only through the loopback SSH forward (Section 9). Do not add a firewall rule opening 3240.
-· Console on loopback. The web console listens on 8098 and is intended to be reached at http://localhost:8098 / http://127.0.0.1:8098 (Section 11). Keep it on loopback; do not expose 8098 to untrusted networks.
-· Key‑only tunnel. The usbip-tunnel account has /sbin/nologin, no password, and its authorized_keys entry is intended to be limited with restrict,port-forwarding,permitlisten="localhost:3240" (see the warning in Section 8.6 — put the options on the same line as the key).
-· Private key never leaves the client. Only id_ed25519.pub (inside authorized_keys) is copied to the server (Section 8.5).
-· Console exposure. The web console has no built‑in multi‑user authentication. Keep it on a trusted management network, restrict it with nft/iptables, or place an authenticating reverse proxy in front of it.
-· Config file mode. /etc/usbip/usbip.conf is installed 640 root:root (Section 7.4) — keep it that way if it ever contains credentials.
-· Firmware/USB trust. Any USB device shared this way is usable as if locally plugged in. Only attach devices from servers you control.
-· Stale attach is not a security boundary. A stale vhci_hcd port keeps a device node visible on the client after the server is gone (Section 13.6). Do not rely on the disappearance of the remote device as an access control; revoke access on the server side (unbind, stop usbipd, remove the key).
+· No public USB/IP port. usbipd is reached only through the loopback SSH forward (Section 9). Do not add a firewall rule opening 3240.    
+· Console on loopback. The web console listens on 8098 and is intended to be reached at http://localhost:8098 / http://127.0.0.1:8098 (Section 11). Keep it on loopback; do not expose 8098 to untrusted networks.    
+· Key‑only tunnel. The usbip-tunnel account has /sbin/nologin, no password, and its authorized_keys entry is intended to be limited with restrict,port-forwarding,permitlisten="localhost:3240" (see the warning in Section 8.6 — put the options on the same line as the key).     
+· Private key never leaves the client. Only id_ed25519.pub (inside authorized_keys) is copied to the server (Section 8.5).     
+· Console exposure. The web console has no built‑in multi‑user authentication. Keep it on a trusted management network, restrict it with nft/iptables, or place an authenticating reverse proxy in front of it.    
+· Config file mode. /etc/usbip/usbip.conf is installed 640 root:root (Section 7.4) — keep it that way if it ever contains credentials.    
+· Firmware/USB trust. Any USB device shared this way is usable as if locally plugged in. Only attach devices from servers you control.    
+· Stale attach is not a security boundary. A stale vhci_hcd port keeps a device node visible on the client after the server is gone (Section 13.6). Do not rely on the disappearance of the remote device as an access control; revoke access on the server side (unbind, stop usbipd, remove the key).    
 
 ---
 
