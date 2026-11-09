@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: GPL-3.0
+# Copyright (C) 2026 Samiux
+# Full license text: https://www.gnu.org/licenses/gpl-3.0.txt
+# License overview: https://www.gnu.org/licenses/gpl-3.0.html
+
+[Unit]
+Description=USB/IP server supervisor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/usbipctl server
+ExecStop=/usr/bin/usbipctl server --stop
+Restart=on-failure
+RestartSec=3
+WatchdogSec=30
+NotifyAccess=main
+
+# --- security hardening ---
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=no
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_DAC_OVERRIDE
+AmbientCapabilities=CAP_SYS_ADMIN CAP_DAC_OVERRIDE
+
+[Install]
+WantedBy=multi-user.target

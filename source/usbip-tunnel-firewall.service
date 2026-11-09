@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: GPL-3.0
+# Copyright (C) 2026 Samiux
+# Full license text: https://www.gnu.org/licenses/gpl-3.0.txt
+# License overview: https://www.gnu.org/licenses/gpl-3.0.html
+
+[Unit]
+Description=Firewall rules for USB/IP SSH tunnel
+Before=usbip-tunnel.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+ExecStart=/usr/sbin/iptables -I INPUT 1 -p tcp --dport 3240  -i lo -j ACCEPT
+ExecStart=/usr/sbin/iptables -I INPUT 1 -p tcp --dport 3240  ! -i lo -j DROP
+ExecStart=/usr/sbin/iptables -I INPUT 1 -p tcp --dport 8098  -i lo -j ACCEPT
+ExecStart=/usr/sbin/iptables -I INPUT 1 -p tcp --dport 8098  ! -i lo -j DROP
+ExecStart=/usr/sbin/iptables -I INPUT 1 -p tcp --dport 18098 -i lo -j ACCEPT
+ExecStart=/usr/sbin/iptables -I INPUT 1 -p tcp --dport 18098 ! -i lo -j DROP
+
+ExecStop=/usr/sbin/iptables -D INPUT -p tcp --dport 3240  -i lo -j ACCEPT
+ExecStop=/usr/sbin/iptables -D INPUT -p tcp --dport 3240  ! -i lo -j DROP
+ExecStop=/usr/sbin/iptables -D INPUT -p tcp --dport 8098  -i lo -j ACCEPT
+ExecStop=/usr/sbin/iptables -D INPUT -p tcp --dport 8098  ! -i lo -j DROP
+ExecStop=/usr/sbin/iptables -D INPUT -p tcp --dport 18098 -i lo -j ACCEPT
+ExecStop=/usr/sbin/iptables -D INPUT -p tcp --dport 18098 ! -i lo -j DROP
+
+[Install]
+WantedBy=usbip-tunnel.service

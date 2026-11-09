@@ -1,0 +1,1419 @@
+<!--
+SPDX-License-Identifier: GPL-3.0
+Copyright (C) 2026 Samiux
+Full license text: https://www.gnu.org/licenses/gpl-3.0.txt
+License overview: https://www.gnu.org/licenses/gpl-3.0.html
+-->
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>USB/IP Console</title>
+<style>
+  :root{
+    --bg:#080c11;--panel:#0f161f;--panel2:#141e29;--panel3:#1a2733;
+    --bd:#1e2c3a;--bd2:#2a3b4d;--txt:#e9f0f7;--dim:#9fb0c1;--muted:#6a7c8f;
+    --acc:#4d8dff;--acc-soft:rgba(77,141,255,.13);
+    --ok:#2fd39a;--ok-soft:rgba(47,211,154,.13);
+    --warn:#f5b545;--warn-soft:rgba(245,181,69,.13);
+    --err:#ff5f6d;--err-soft:rgba(255,95,109,.13);
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+    --r:11px;--r-sm:8px;--shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.22);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font:13px/1.55 var(--sans);background:var(--bg);color:var(--txt);
+       -webkit-font-smoothing:antialiased;min-height:100vh;padding-bottom:60px}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:5px;border:2px solid var(--bg)}
+
+  .wrap{max-width:1240px;margin:0 auto;padding:0 20px}
+  header{position:sticky;top:0;z-index:40;display:flex;align-items:center;gap:16px;
+         flex-wrap:wrap;padding:13px 0;background:linear-gradient(to bottom,rgba(8,12,17,.95),rgba(8,12,17,.72));
+         backdrop-filter:blur(12px);border-bottom:1px solid var(--bd);margin-bottom:16px}
+  .brand{display:flex;align-items:center;gap:11px}
+  .brand-mark{width:36px;height:36px;border-radius:10px;flex-shrink:0;
+              background:linear-gradient(145deg,#2f6dff,#1c9dff 60%,#20d6b0);
+              display:grid;place-items:center;color:#fff;
+              box-shadow:0 4px 16px rgba(47,109,255,.35),inset 0 1px 0 rgba(255,255,255,.2)}
+  .brand-mark svg{width:19px;height:19px}
+  .brand-title{font-size:14.5px;font-weight:650;line-height:1.15;letter-spacing:-.2px}
+  .brand-sub{font:10.5px var(--mono);color:var(--muted);letter-spacing:.3px}
+  .sp{flex:1}
+  .pills{display:flex;gap:7px;flex-wrap:wrap}
+
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:99px;
+        font:11px var(--mono);border:1px solid var(--bd2);background:var(--panel2);color:var(--dim);
+        white-space:nowrap;font-weight:550}
+  .pill .dot{width:6px;height:6px;border-radius:50%;background:var(--muted);flex-shrink:0}
+  .pill.ok{color:var(--ok);border-color:rgba(47,211,154,.35);background:var(--ok-soft)}
+  .pill.ok .dot{background:var(--ok);animation:pulse 2s infinite}
+  .pill.warn{color:var(--warn);border-color:rgba(245,181,69,.35);background:var(--warn-soft)}
+  .pill.warn .dot{background:var(--warn)}
+  .pill.err{color:var(--err);border-color:rgba(255,95,109,.35);background:var(--err-soft)}
+  .pill.err .dot{background:var(--err)}
+  .pill.acc{color:var(--acc);border-color:rgba(77,141,255,.35);background:var(--acc-soft)}
+  .pill.acc .dot{background:var(--acc)}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(47,211,154,.55)}
+                   70%{box-shadow:0 0 0 5px rgba(47,211,154,0)}
+                   100%{box-shadow:0 0 0 0 rgba(47,211,154,0)}}
+
+  nav.tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;
+           border-bottom:1px solid var(--bd);margin-bottom:20px}
+  nav.tabs::-webkit-scrollbar{display:none}
+  .tab{display:inline-flex;align-items:center;gap:7px;padding:11px 15px 13px;border:0;
+       background:none;cursor:pointer;color:var(--muted);font:13px var(--sans);font-weight:550;
+       border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;
+       transition:color .15s,border-color .15s}
+  .tab:hover{color:var(--txt)}
+  .tab.active{color:var(--acc);border-bottom-color:var(--acc)}
+  .tab .count{font:10px var(--mono);font-weight:700;padding:1px 6px;border-radius:99px;
+              background:var(--panel3);color:var(--dim)}
+  .tab.active .count{background:var(--acc-soft);color:var(--acc)}
+
+  .panel{display:none;animation:fade .22s ease}
+  .panel.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+
+  .grid{display:grid;gap:14px}
+  .g2{grid-template-columns:1fr}
+  .g3{grid-template-columns:1fr}
+  .g4{grid-template-columns:repeat(2,1fr)}
+  @media(min-width:760px){.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}}
+
+  .card{background:var(--panel);border:1px solid var(--bd);border-radius:var(--r);
+        box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column}
+  .card h2{display:flex;align-items:center;gap:9px;padding:12px 16px;border-bottom:1px solid var(--bd);
+           font:12px var(--mono);font-weight:650;letter-spacing:.4px;color:var(--dim);
+           text-transform:uppercase;background:linear-gradient(to bottom,rgba(255,255,255,.015),transparent)}
+  .card h2 .hico{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;
+                 background:var(--panel3);color:var(--acc);flex-shrink:0}
+  .card h2 .hico.ok{color:var(--ok);background:var(--ok-soft)}
+  .card h2 .hico.warn{color:var(--warn);background:var(--warn-soft)}
+  .card h2 .hico.err{color:var(--err);background:var(--err-soft)}
+  .card h2 .hsp{flex:1}
+  .card .body{padding:15px 16px;flex:1}
+  .card .body.tight{padding:0}
+
+  /* status row */
+  .srow{display:flex;align-items:center;justify-content:space-between;gap:12px;
+        padding:10px 14px;border-bottom:1px solid var(--bd)}
+  .srow:last-child{border-bottom:none}
+  .srow .sk{font:11px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+  .srow .sv{font:12px var(--mono);color:var(--txt);text-align:right;
+            max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .srow .sv.ok{color:var(--ok)}
+  .srow .sv.warn{color:var(--warn)}
+  .srow .sv.err{color:var(--err)}
+  .srow .sv.mono-badge{font-size:11px;padding:2px 8px;border-radius:5px;
+                        background:var(--panel3);border:1px solid var(--bd2)}
+
+  /* stat */
+  .stat{padding:14px 16px;background:var(--panel);border:1px solid var(--bd);
+        border-radius:var(--r);box-shadow:var(--shadow);display:flex;gap:12px;align-items:flex-start}
+  .stat .sico{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;
+              background:var(--panel3);color:var(--dim);flex-shrink:0}
+  .stat .sico.ok{background:var(--ok-soft);color:var(--ok)}
+  .stat .sico.acc{background:var(--acc-soft);color:var(--acc)}
+  .stat .sico.warn{background:var(--warn-soft);color:var(--warn)}
+  .stat .sico.err{background:var(--err-soft);color:var(--err)}
+  .stat .slab{font:10px var(--mono);text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:700}
+  .stat .sval{font-size:15px;font-weight:650;margin-top:2px;line-height:1.2;letter-spacing:-.2px}
+  .stat .ssub{font:10.5px var(--mono);color:var(--muted);margin-top:3px;word-break:break-all;line-height:1.45}
+
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;
+       padding:7px 13px;border-radius:var(--r-sm);border:1px solid var(--bd2);
+       background:var(--panel2);color:var(--txt);font:12px var(--sans);font-weight:550;
+       cursor:pointer;transition:all .15s;white-space:nowrap}
+  .btn:hover:not(:disabled){background:var(--panel3);border-color:#38506a}
+  .btn:disabled{opacity:.35;cursor:not-allowed}
+  .btn.pri{background:linear-gradient(180deg,#5595ff,#3d7df0);border-color:#3d7df0;color:#fff}
+  .btn.pri:hover:not(:disabled){background:linear-gradient(180deg,#66a1ff,#4a88ff)}
+  .btn.ok{background:transparent;border-color:rgba(47,211,154,.45);color:var(--ok)}
+  .btn.ok:hover:not(:disabled){background:var(--ok-soft)}
+  .btn.err{background:transparent;border-color:rgba(255,95,109,.45);color:var(--err)}
+  .btn.err:hover:not(:disabled){background:var(--err-soft)}
+  .btn.ghost{background:transparent;border-color:transparent;color:var(--dim)}
+  .btn.ghost:hover:not(:disabled){background:var(--panel2);color:var(--txt)}
+  .btn.sm{padding:4px 9px;font-size:11px;gap:4px}
+  .btn svg{width:13px;height:13px;flex-shrink:0}
+
+  .field{margin-bottom:12px}
+  .field:last-child{margin-bottom:0}
+  .field label{display:block;font:10px var(--mono);text-transform:uppercase;letter-spacing:.6px;
+               color:var(--muted);font-weight:700;margin-bottom:5px}
+  .field label code{color:var(--acc);text-transform:none;font-weight:600}
+  .field .hint{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5}
+  .input,.select{width:100%;padding:8px 11px;background:var(--bg);color:var(--txt);
+                 border:1px solid var(--bd2);border-radius:var(--r-sm);font:12px var(--mono);outline:none;
+                 transition:border-color .15s,box-shadow .15s}
+  .select{font-family:var(--sans);cursor:pointer;appearance:none;padding-right:30px;
+          background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%236a7c8f' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+          background-repeat:no-repeat;background-position:right 10px center}
+  .input:focus,.select:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-soft)}
+  .row{display:flex;gap:10px}.row>*{flex:1;min-width:0}.row .fixed{flex:0 0 auto}
+  .row-end{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:14px}
+  .form-group{margin-bottom:18px}.form-group:last-child{margin-bottom:0}
+  .form-group-title{font:10.5px var(--mono);font-weight:700;letter-spacing:.7px;text-transform:uppercase;
+                    color:var(--acc);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--bd)}
+
+  .trow{display:flex;align-items:center;justify-content:space-between;gap:14px;
+        padding:9px 0;border-bottom:1px solid var(--bd)}
+  .trow:last-child{border-bottom:none;padding-bottom:0}
+  .trow .tl{font-size:12px;font-weight:550}
+  .trow .td{font:10.5px var(--mono);color:var(--muted);margin-top:1px}
+  .toggle{position:relative;width:36px;height:20px;background:var(--bd2);border-radius:99px;
+          cursor:pointer;border:none;flex-shrink:0;transition:background .2s}
+  .toggle::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;
+                 border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 2px rgba(0,0,0,.4)}
+  .toggle.on{background:var(--acc)}
+  .toggle.on::after{transform:translateX(16px)}
+
+  .dev-list{display:flex;flex-direction:column;gap:7px}
+  .dev{display:flex;align-items:center;gap:11px;padding:10px 12px;background:var(--panel2);
+       border:1px solid var(--bd);border-radius:9px;transition:border-color .15s,background .15s}
+  .dev:hover{border-color:var(--bd2);background:var(--panel3)}
+  .dev-ico{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;
+           background:var(--bg);border:1px solid var(--bd2);color:var(--acc);flex-shrink:0}
+  .dev-ico.ok{color:var(--ok);border-color:rgba(47,211,154,.3)}
+  .dev-main{flex:1;min-width:0}
+  .dev-top{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .dev-busid{font:11px var(--mono);font-weight:700;color:var(--acc)}
+  .dev-name{font-size:12.5px;font-weight:550;margin-top:1px}
+  .dev-meta{font:10.5px var(--mono);color:var(--muted);margin-top:2px;white-space:nowrap;
+            overflow:hidden;text-overflow:ellipsis}
+  .dev-actions{display:flex;gap:5px;flex-shrink:0}
+
+  .tbl-wrap{overflow-x:auto;border-radius:9px;border:1px solid var(--bd)}
+  table.tbl{width:100%;border-collapse:collapse;font:11px var(--mono)}
+  .tbl th{text-align:left;padding:8px 12px;font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;
+          color:var(--muted);font-weight:700;background:var(--panel2);border-bottom:1px solid var(--bd);white-space:nowrap}
+  .tbl td{padding:8px 12px;border-bottom:1px solid var(--bd);color:#c8d5e2}
+  .tbl tr:last-child td{border-bottom:none}
+  .tbl tr:hover td{background:rgba(255,255,255,.015);color:var(--txt)}
+
+  .empty{padding:32px 16px;text-align:center;color:var(--muted)}
+  .empty .eico{width:44px;height:44px;border-radius:11px;margin:0 auto 10px;
+               display:grid;place-items:center;background:var(--panel2);border:1px solid var(--bd);color:var(--muted)}
+  .empty .et{font-size:12.5px;font-weight:600;color:var(--dim);margin-bottom:3px}
+  .empty .ed{font:11px var(--mono);color:var(--muted)}
+
+  .code{background:#05090d;border:1px solid var(--bd2);border-radius:9px;padding:11px 13px;
+        font:11px var(--mono);line-height:1.7;color:#c3d4e6;overflow-x:auto;white-space:pre;tab-size:2}
+  .code .c-c{color:#4d6070}.code .c-k{color:#7aa2f7}.code .c-v{color:#9ece6a}
+  .code-wrap{position:relative}
+  .code-wrap .copy{position:absolute;top:7px;right:7px;opacity:0;transition:opacity .15s;z-index:2}
+  .code-wrap:hover .copy{opacity:1}
+
+  .log{background:#05090d;border:1px solid var(--bd);border-radius:9px;padding:10px 12px;
+       font:10.5px var(--mono);line-height:1.75;max-height:340px;overflow-y:auto;
+       white-space:pre-wrap;word-break:break-word}
+  .log .t{color:#4d6070}.log .ok{color:var(--ok)}.log .err{color:var(--err)}
+  .log .warn{color:var(--warn)}.log .info{color:var(--acc)}.log .dim{color:var(--dim)}
+
+  .flow{display:flex;align-items:center;flex-wrap:wrap;padding:4px 0}
+  .flow-n{display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--panel2);
+          border:1px solid var(--bd2);border-radius:9px;font-size:11.5px;font-weight:550;white-space:nowrap}
+  .flow-n .fi{width:24px;height:24px;border-radius:6px;display:grid;place-items:center;
+              background:var(--panel3);color:var(--muted);flex-shrink:0}
+  .flow-n.on{border-color:rgba(47,211,154,.4);box-shadow:0 0 0 3px rgba(47,211,154,.07)}
+  .flow-n.on .fi{color:var(--ok);background:var(--ok-soft)}
+  .flow-n.warn{border-color:rgba(245,181,69,.4)}
+  .flow-n.warn .fi{color:var(--warn);background:var(--warn-soft)}
+  .flow-n.off{opacity:.45}
+  .flow-n .fl{font:9.5px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.4px;line-height:1.1}
+  .flow-n .fn{font-size:11.5px;line-height:1.2}
+  .flow-l{flex:1;min-width:30px;height:2px;background:var(--bd2);position:relative;margin:0 2px}
+  .flow-l::after{content:'';position:absolute;right:-1px;top:-4px;border:5px solid transparent;border-left-color:var(--bd2)}
+  .flow-l.on{background:rgba(47,211,154,.6)}
+  .flow-l.on::after{border-left-color:rgba(47,211,154,.6)}
+  .flow-l .lb{position:absolute;top:-18px;left:50%;transform:translateX(-50%);
+              font:9px var(--mono);color:var(--muted);white-space:nowrap;background:var(--panel);padding:0 4px}
+
+  .unit{padding:13px 15px;background:var(--panel2);border:1px solid var(--bd);border-radius:9px;margin-bottom:9px}
+  .unit:last-child{margin-bottom:0}
+  .unit-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:8px}
+  .unit-name{font:11.5px var(--mono);font-weight:700;color:var(--txt)}
+  .unit-acts{display:flex;gap:4px;flex-wrap:wrap;margin-top:8px}
+  .unit-desc{font-size:11px;color:var(--muted);line-height:1.4;margin-top:2px}
+
+  .toasts{position:fixed;bottom:18px;right:18px;z-index:999;display:flex;flex-direction:column;gap:7px;max-width:340px}
+  .toast{padding:10px 13px;background:var(--panel3);border:1px solid var(--bd2);border-left:3px solid var(--acc);
+         border-radius:9px;font-size:12px;box-shadow:0 10px 28px rgba(0,0,0,.5);animation:tin .2s}
+  .toast.ok{border-left-color:var(--ok)}.toast.err{border-left-color:var(--err)}.toast.warn{border-left-color:var(--warn)}
+  .toast .tt{font-weight:600;margin-bottom:1px}
+  .toast .td{font:10.5px var(--mono);color:var(--dim);word-break:break-word}
+  @keyframes tin{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+
+  .banner{padding:10px 14px;background:var(--err-soft);border:1px solid rgba(255,95,109,.35);
+          border-radius:var(--r-sm);font-size:12px;color:var(--err);margin-bottom:16px;
+          display:flex;align-items:center;gap:9px}
+  .banner.warn{background:var(--warn-soft);border-color:rgba(245,181,69,.35);color:var(--warn)}
+  .banner svg{width:15px;height:15px;flex-shrink:0}
+
+  .kbd{font:10px var(--mono);padding:1px 5px;border-radius:4px;background:var(--panel3);
+       border:1px solid var(--bd2);color:var(--dim)}
+  .mono{font-family:var(--mono)}.dim{color:var(--muted)}
+  .hr{height:1px;background:var(--bd);margin:14px 0}
+  footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--bd);
+         display:flex;align-items:center;gap:10px;flex-wrap:wrap;font:10.5px var(--mono);color:var(--muted)}
+  footer .sp{flex:1}
+  @media(max-width:600px){.wrap{padding:0 12px}header{padding:10px 0}.pill{font-size:10px}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2v6"/><path d="M9 8h6"/><path d="M12 8v6"/>
+          <circle cx="12" cy="17" r="3"/><path d="M12 20v2"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-title">USB/IP Console</div>
+        <div class="brand-sub" id="brandSub">usbipctl supervisor · client over SSH tunnel</div>
+      </div>
+    </div>
+    <div class="sp"></div>
+    <div class="pills" id="topPills"></div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="overview">
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      Overview
+    </button>
+    <button class="tab" data-tab="connection">
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      Connection
+    </button>
+    <button class="tab" data-tab="config">
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Config
+    </button>
+    <button class="tab" data-tab="devices">
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="17" r="2.5"/><path d="M12 14.5V5"/><path d="M9 7l3-3 3 3"/><path d="M8 11h8"/></svg>
+      Devices <span class="count" id="tabDevCount">0</span>
+    </button>
+    <button class="tab" data-tab="units">
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+      Units
+    </button>
+    <button class="tab" data-tab="commands">
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      Commands
+    </button>
+    <button class="tab" data-tab="server">
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/>
+        <line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>
+      </svg>
+      Server
+    </button>
+  </nav>
+
+  <!-- ========== OVERVIEW ========== -->
+  <section class="panel active" id="panel-overview">
+    <div class="grid g4" style="margin-bottom:16px" id="statGrid"></div>
+
+    <div class="grid g2" style="margin-bottom:16px">
+      <div class="card">
+        <h2>
+          <span class="hico"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg></span>
+          <span>Topology</span><span class="hsp"></span>
+          <span class="pill" id="topoPill"><span class="dot"></span>—</span>
+        </h2>
+        <div class="body">
+          <div class="flow" id="flow"></div>
+          <div class="hr"></div>
+          <div class="mono dim" style="font-size:11px" id="topoDetail">—</div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>
+          <span class="hico"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+          <span>Live events</span><span class="hsp"></span>
+          <button class="btn sm ghost" onclick="clearLog()">Clear</button>
+        </h2>
+        <div class="body tight" style="padding:13px 15px">
+          <div class="log" id="log" style="max-height:220px"><span class="info">connecting…</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>
+        <span class="hico"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></svg></span>
+        <span>VHCI ports</span><span class="hsp"></span>
+        <span class="pill" id="vhciPill"><span class="dot"></span>—</span>
+      </h2>
+      <div class="body tight" id="vhciWrap"></div>
+    </div>
+  </section>
+
+  <!-- ========== CONNECTION ========== -->
+  <section class="panel" id="panel-connection">
+    <div class="grid g3" style="margin-bottom:16px">
+      <!-- Client -->
+      <div class="card">
+        <h2>
+          <span class="hico" id="clientHico"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg></span>
+          <span>Local client</span><span class="hsp"></span>
+          <span class="pill" id="clientPill"><span class="dot"></span>—</span>
+        </h2>
+        <div class="body tight" id="clientBody"></div>
+      </div>
+
+      <!-- Tunnel -->
+      <div class="card">
+        <h2>
+          <span class="hico" id="tunnelHico"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
+          <span>SSH tunnel</span><span class="hsp"></span>
+          <span class="pill" id="tunnelPill"><span class="dot"></span>—</span>
+        </h2>
+        <div class="body tight" id="tunnelBody"></div>
+      </div>
+
+      <!-- Remote -->
+      <div class="card">
+        <h2>
+          <span class="hico" id="remoteHico"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg></span>
+          <span>Remote daemon</span><span class="hsp"></span>
+          <span class="pill" id="remotePill"><span class="dot"></span>—</span>
+        </h2>
+        <div class="body tight" id="remoteBody"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>
+        <span class="hico"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>
+        <span>Diagnostics</span><span class="hsp"></span>
+        <button class="btn sm pri" onclick="runDiagnose()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          Run diagnosis
+        </button>
+      </h2>
+      <div class="body tight" style="padding:13px 15px">
+        <div id="diagnoseResult">
+          <div class="empty">
+            <div class="eico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+            <div class="et">Press "Run diagnosis" to check every component</div>
+            <div class="ed">modules · systemd units · tunnel socket · remote daemon</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== CONFIG ========== -->
+  <section class="panel" id="panel-config">
+    <div id="configBanner"></div>
+    <div class="grid g2">
+      <div class="card">
+        <h2>
+          <span class="hico"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+          <span>usbip.conf</span><span class="hsp"></span>
+          <span class="pill" id="confMetaPill"><span class="dot"></span>—</span>
+        </h2>
+        <div class="body">
+          <form id="confForm" onsubmit="saveConfig(event)"></form>
+          <div class="row-end">
+            <button type="button" class="btn ghost" onclick="reloadConfig()">Reload</button>
+            <button type="button" class="btn pri" onclick="saveConfig()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              Save config
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>
+          <span class="hico"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></span>
+          <span>Preview</span><span class="hsp"></span>
+          <span class="mono dim" style="font-size:10px">what will be written</span>
+        </h2>
+        <div class="body tight" style="padding:13px 15px">
+          <div class="code-wrap">
+            <div class="code" id="confPreview" style="max-height:520px;overflow:auto"></div>
+            <button class="btn sm copy" onclick="copyEl('confPreview')">⧉</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== DEVICES ========== -->
+  <section class="panel" id="panel-devices">
+    <div class="grid g2" style="margin-bottom:16px">
+      <div class="card">
+        <h2>
+          <span class="hico"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+          <span>Local USB (this host)</span><span class="hsp"></span>
+          <button class="btn sm" onclick="refreshLocal()">Refresh</button>
+        </h2>
+        <div class="body tight" style="padding:13px 15px">
+          <div class="mono dim" style="font-size:10.5px;margin-bottom:8px">usbip list -l</div>
+          <div class="dev-list" id="localList"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>
+          <span class="hico"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
+          <span>Remote USB (via tunnel)</span><span class="hsp"></span>
+          <button class="btn sm" onclick="refreshRemote()">Refresh</button>
+        </h2>
+        <div class="body tight" style="padding:13px 15px">
+          <div class="row" style="margin-bottom:9px">
+            <div class="fixed" style="flex:0 0 auto;display:flex;align-items:center;gap:6px">
+              <span class="mono dim" style="font-size:10.5px">host</span>
+              <select class="select" id="remoteHost" style="width:auto;min-width:160px" onchange="refreshRemote()"></select>
+            </div>
+          </div>
+          <div class="dev-list" id="remoteList"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>
+        <span class="hico"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></svg></span>
+        <span>VHCI port map</span><span class="hsp"></span>
+        <span class="pill" id="vhciPill2"><span class="dot"></span>—</span>
+      </h2>
+      <div class="body tight" id="vhciWrap2"></div>
+    </div>
+  </section>
+
+  <!-- ========== UNITS ========== -->
+  <section class="panel" id="panel-units">
+    <div class="card" style="margin-bottom:16px">
+      <h2>
+        <span class="hico"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg></span>
+        <span>systemctl control</span><span class="hsp"></span>
+        <button class="btn sm ghost" onclick="refreshUnits()">Refresh</button>
+      </h2>
+      <div class="body" id="unitsWrap"></div>
+    </div>
+    <div class="card">
+      <h2>
+        <span class="hico"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></span>
+        <span>Journal</span>
+        <select class="select" id="journalUnit" style="width:auto;font-size:11px;padding:4px 26px 4px 9px;margin-left:8px" onchange="refreshJournal()">
+          <option value="usbip-client.service">usbip-client.service</option>
+          <option value="usbip-tunnel.service">usbip-tunnel.service</option>
+          <option value="usbip-server.service">usbip-server.service</option>
+          <option value="usbip-tunnel-firewall.service">usbip-tunnel-firewall.service</option>
+        </select>
+        <span class="hsp"></span>
+        <button class="btn sm" onclick="refreshJournal()">Reload</button>
+      </h2>
+      <div class="body tight" style="padding:13px 15px">
+        <div class="log" id="journalLog" style="max-height:420px"><span class="dim">select a unit and press Reload</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== COMMANDS ========== -->
+  <section class="panel" id="panel-commands">
+    <div class="grid g2" id="cmdGrid"></div>
+  </section>
+
+  <!-- ========== SERVER VIEW ========== -->
+  <section class="panel" id="panel-server">
+    <div class="card">
+      <h2>
+        <span class="hico"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></span>
+        <span>Server usbip-bridge</span><span class="hsp"></span>
+        <a class="btn sm ghost" href="http://127.0.0.1:18098/" target="_blank" rel="noopener">Open in new tab ↗</a>
+      </h2>
+      <div class="body tight" style="padding:0">
+        <iframe id="serverFrame" style="width:100%;height:calc(100vh - 260px);border:0;background:var(--bg)"></iframe>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>usbip-bridge</span><span class="dim">·</span>
+    <span id="bridgeVersion">—</span>
+    <span class="sp"></span>
+    <span class="pill" id="ssePill"><span class="dot"></span>SSE</span>
+  </footer>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script>
+/* ============================================================================
+   Helpers
+   ========================================================================== */
+const H = {'Content-Type':'application/json','X-Requested-With':'usbip-bridge'};
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, {...opts, headers: {...H, ...(opts.headers||{})}});
+  const text = await r.text();
+  let data; try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+  if (!r.ok) throw new Error((data && data.error) || (typeof data === 'string' ? data : `HTTP ${r.status}`));
+  return data;
+}
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function copyEl(id) {
+  const el = document.getElementById(id); if (!el) return;
+  const t = el.innerText || el.textContent || '';
+  navigator.clipboard.writeText(t).then(() => toast('Copied','','ok')).catch(() => toast('Copy failed','','err'));
+}
+function toast(title, desc = '', kind = '') {
+  const t = document.createElement('div');
+  t.className = 'toast ' + kind;
+  t.innerHTML = `<div class="tt">${esc(title)}</div>${desc ? `<div class="td">${esc(desc)}</div>` : ''}`;
+  document.getElementById('toasts').appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'all .2s'; setTimeout(() => t.remove(), 200); }, 3200);
+}
+
+/* ============================================================================
+   State
+   ========================================================================== */
+const S = {
+  status: null, units: {}, conf: {}, confMeta: {},
+  local: [], remote: [], attached: [], vhci: [],
+  logs: [], sseOk: false, bridgeVersion: '—',
+};
+
+/* ============================================================================
+   Config field schema (unchanged from your usbip.conf)
+   ========================================================================== */
+const FIELDS = [
+  { group: 'General',       key: 'LOG_FACILITY',          type: 'text',  hint: 'syslog facility (facility.level)' },
+  { group: 'General',       key: 'NOTIFY_ENABLED',         type: 'flag',  hint: 'systemd-notify readiness notification' },
+  { group: 'SERVER section', key: 'SRV_INTERVAL',           type: 'int',   hint: 'scan interval (seconds)' },
+  { group: 'SERVER section', key: 'SRV_EXPORT_ONLY',        type: 'array', hint: 'export only these busids (empty = all)' },
+  { group: 'SERVER section', key: 'SRV_UNBIND_ON_STOP',     type: 'flag',  hint: 'unbind exported devices on stop' },
+  { group: 'SERVER section', key: 'SRV_USBIPD_OPTS',        type: 'text',  hint: 'usbipd launch options (-4 = IPv4 only)' },
+  { group: 'CLIENT section', key: 'CLI_INTERVAL',           type: 'int',   hint: 'scan interval (seconds)' },
+  { group: 'CLIENT section', key: 'CLI_SERVERS',            type: 'array', hint: '127.0.0.1 = tunnel mode; real IP = direct' },
+  { group: 'CLIENT section', key: 'CLI_TCP_PORT',           type: 'int',   hint: 'usbipd port (default 3240)' },
+  { group: 'CLIENT section', key: 'CLI_DEVICES',            type: 'array', hint: 'connect only these busids (empty = all)' },
+  { group: 'CLIENT section', key: 'CLI_DETACH_ON_REMOVE',   type: 'flag',  hint: 'detach when the remote device disappears' },
+  { group: 'CLIENT section', key: 'CLI_DETACH_ON_STOP',     type: 'flag',  hint: 'detach all ports on stop' },
+  { group: 'CLIENT section', key: 'CLI_LIST_TIMEOUT',       type: 'int',   hint: 'usbip list -r timeout (seconds)' },
+];
+const GROUPS = ['General', 'SERVER section', 'CLIENT section'];
+const DEFAULTS = {
+  LOG_FACILITY:'daemon.info', NOTIFY_ENABLED:1, SRV_INTERVAL:3,
+  SRV_EXPORT_ONLY:[], SRV_UNBIND_ON_STOP:1, SRV_USBIPD_OPTS:'-4',
+  CLI_INTERVAL:5, CLI_SERVERS:['127.0.0.1'], CLI_TCP_PORT:3240,
+  CLI_DEVICES:[], CLI_DETACH_ON_REMOVE:1, CLI_DETACH_ON_STOP:1, CLI_LIST_TIMEOUT:5,
+};
+function fieldValue(key) { return S.conf[key] !== undefined ? S.conf[key] : DEFAULTS[key]; }
+
+/* ============================================================================
+   Overview stats: four honest facts
+   ========================================================================== */
+function renderStats() {
+  const s = S.status;
+  if (!s) { document.getElementById('statGrid').innerHTML = ''; return; }
+
+  const health = s.overall_health;
+  const client = s.client;
+  const tunnel = s.tunnel;
+  const remote = s.remote_daemon;
+  const ports  = (s.ports && s.ports.attached) || [];
+
+  const stat = (icon, cls, label, value, sub) => `
+    <div class="stat">
+      <div class="sico ${cls}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icon}</svg></div>
+      <div style="min-width:0">
+        <div class="slab">${esc(label)}</div>
+        <div class="sval">${esc(value)}</div>
+        <div class="ssub">${sub}</div>
+      </div>
+    </div>`;
+
+  const healthIcon = health === 'ok'
+    ? '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'
+    : '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>';
+
+  const clientIcon = '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>';
+  const tunnelIcon = '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>';
+  const remoteIcon = '<rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>';
+  const portsIcon  = '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/>';
+
+  const clientCls = client.supervisor_active ? 'ok' : (health === 'ok' ? 'acc' : 'err');
+  const tunnelCls = tunnel.detected ? 'ok' : (health === 'ok' ? 'acc' : 'warn');
+  const remoteCls = remote.reachable ? 'ok' : 'err';
+  const portsCls  = ports.length ? 'acc' : 'warn';
+
+  document.getElementById('statGrid').innerHTML = [
+    stat(healthIcon, health === 'ok' ? 'ok' : health === 'warn' ? 'warn' : 'err',
+         'Overall health', health.toUpperCase(), `role: ${s.role} · topology: ${s.topology}`),
+    stat(clientIcon, clientCls,
+         'Local client',
+         client.supervisor_active ? 'Active' : 'Inactive',
+         `supervisor: ${client.method || 'none'} · vhci: ${client.vhci_loaded ? 'loaded' : 'not loaded'}`),
+    stat(tunnelIcon, tunnelCls,
+         'SSH tunnel',
+         tunnel.detected ? 'Up' : 'Down',
+         tunnel.detected ? `${tunnel.method || 'port'} · ${tunnel.addr || '127.0.0.1:3240'}` : `127.0.0.1:${tunnel.port} not listening`),
+    stat(remoteIcon, remoteCls,
+         'Remote daemon',
+         remote.reachable ? 'Reachable' : 'Unreachable',
+         remote.reachable ? `${remote.device_count} device(s) · ${remote.host}:${remote.port} via ${remote.via}` : `${remote.host || '?'}:${remote.port} — ${remote.error || 'no route'}`),
+  ].join('');
+}
+
+/* ============================================================================
+   Connection tab
+   ========================================================================== */
+function renderConnection() {
+  const s = S.status; if (!s) return;
+  const client = s.client, tunnel = s.tunnel, remote = s.remote_daemon;
+
+  // Client card
+  document.getElementById('clientPill').className = 'pill ' + (client.supervisor_active ? 'ok' : 'err');
+  document.getElementById('clientPill').innerHTML = `<span class="dot"></span>${client.supervisor_active ? 'active' : 'inactive'}`;
+  document.getElementById('clientHico').className = 'hico ' + (client.supervisor_active ? 'ok' : 'err');
+  document.getElementById('clientBody').innerHTML = `
+    ${row('usbip-client.service', client.unit?.active || 'unknown',
+          client.supervisor_active ? 'ok' : 'err')}
+    ${row('detection method', client.method || 'none', client.method ? 'ok' : 'dim')}
+    ${row('vhci_hcd', client.vhci_loaded ? 'loaded' : 'not loaded', client.vhci_loaded ? 'ok' : 'err')}
+    ${row('usbip_core', client.usbip_core_loaded ? 'loaded' : 'not loaded', client.usbip_core_loaded ? 'ok' : 'err')}
+    ${row('attached ports', String(client.attached_count), client.attached_count ? 'ok' : 'dim')}
+  `;
+
+  // Tunnel card
+  document.getElementById('tunnelPill').className = 'pill ' + (tunnel.detected ? 'ok' : 'warn');
+  document.getElementById('tunnelPill').innerHTML = `<span class="dot"></span>${tunnel.detected ? 'up' : 'down'}`;
+  document.getElementById('tunnelHico').className = 'hico ' + (tunnel.detected ? 'ok' : 'warn');
+  document.getElementById('tunnelBody').innerHTML = `
+    ${row('usbip-tunnel.service', tunnel.unit?.active || 'unknown', tunnel.unit?.active === 'active' ? 'ok' : 'dim')}
+    ${row('detection method', tunnel.method || 'none', tunnel.method ? 'ok' : 'dim')}
+    ${row('listening', tunnel.listening ? 'yes' : 'no', tunnel.listening ? 'ok' : 'err')}
+    ${row('address', tunnel.addr || `127.0.0.1:${tunnel.port}`, tunnel.addr ? 'ok' : 'dim')}
+    ${row('process', tunnel.process || '—', tunnel.process === 'ssh' ? 'ok' : 'dim')}
+    ${row('pid', tunnel.pid != null ? String(tunnel.pid) : '—', 'dim')}
+    ${row('detail', tunnel.detail || '—', 'dim')}
+  `;
+
+  // Remote card
+  document.getElementById('remotePill').className = 'pill ' + (remote.reachable ? 'ok' : 'err');
+  document.getElementById('remotePill').innerHTML = `<span class="dot"></span>${remote.reachable ? 'reachable' : 'unreachable'}`;
+  document.getElementById('remoteHico').className = 'hico ' + (remote.reachable ? 'ok' : 'err');
+  document.getElementById('remoteBody').innerHTML = `
+    ${row('host', remote.host || '—', 'dim')}
+    ${row('port', String(remote.port || 3240), 'dim')}
+    ${row('via', remote.via || '—', remote.via === 'tunnel' ? 'ok' : remote.via === 'direct' ? 'acc' : 'dim')}
+    ${row('TCP connect', remote.tcp_ok ? 'ok' : 'failed', remote.tcp_ok ? 'ok' : 'err')}
+    ${row('usbip list -r', remote.usbip_ok ? 'ok' : 'failed', remote.usbip_ok ? 'ok' : 'err')}
+    ${row('exportable devices', String(remote.device_count || 0), remote.device_count ? 'ok' : 'dim')}
+    ${remote.error ? row('error', remote.error, 'err') : ''}
+  `;
+}
+
+function row(k, v, cls) {
+  return `<div class="srow"><span class="sk">${esc(k)}</span><span class="sv ${cls||''}">${esc(v)}</span></div>`;
+}
+
+/* ============================================================================
+   Top pills + topology + flow
+   ========================================================================== */
+function renderTopPills() {
+  const s = S.status; if (!s) return;
+  const h = s.overall_health;
+  const parts = [
+    `<span class="pill ${h === 'ok' ? 'ok' : h === 'warn' ? 'warn' : 'err'}"><span class="dot"></span>${esc(h)}</span>`,
+    `<span class="pill ${s.client.supervisor_active ? 'ok' : 'dim'}"><span class="dot"></span>client ${s.client.supervisor_active ? 'on' : 'off'}</span>`,
+    `<span class="pill ${s.tunnel.detected ? 'ok' : 'warn'}"><span class="dot"></span>tunnel ${s.tunnel.detected ? 'up' : 'down'}</span>`,
+    `<span class="pill ${s.remote_daemon.reachable ? 'ok' : 'err'}"><span class="dot"></span>remote ${s.remote_daemon.reachable ? 'ok' : 'down'}</span>`,
+    `<span class="pill acc"><span class="dot"></span>${esc(s.topology)}</span>`,
+  ];
+  document.getElementById('topPills').innerHTML = parts.join('');
+}
+
+function renderTopPills() {
+  const s = S.status; if (!s) return;
+  const h = s.overall_health;
+  const parts = [
+    `<span class="pill ${h === 'ok' ? 'ok' : h === 'warn' ? 'warn' : 'err'}"><span class="dot"></span>${esc(h)}</span>`,
+    `<span class="pill ${s.client.supervisor_active ? 'ok' : 'dim'}"><span class="dot"></span>client ${s.client.supervisor_active ? 'on' : 'off'}</span>`,
+    `<span class="pill ${s.tunnel.detected ? 'ok' : 'warn'}"><span class="dot"></span>tunnel ${s.tunnel.detected ? 'up' : 'down'}</span>`,
+    `<span class="pill ${s.remote_daemon.reachable ? 'ok' : 'err'}"><span class="dot"></span>remote ${s.remote_daemon.reachable ? 'ok' : 'down'}</span>`,
+    `<span class="pill acc"><span class="dot"></span>${esc(s.topology)}</span>`,
+  ];
+
+  // peer link to the server's bridge, only when a tunnel exists ---
+  const peerUrl = window.USBIP_PEER_URL || 'http://127.0.0.1:18098/';
+  const showPeer = (s.topology === 'tunnel' || s.topology === 'tunnel-only')
+                && s.tunnel.detected;
+  if (showPeer) {
+    parts.push(`<a class="pill" href="${peerUrl}" target="_blank" rel="noopener"
+      style="text-decoration:none;cursor:pointer;color:var(--acc);
+             border-color:rgba(77,141,255,.35);background:var(--acc-soft);margin-left:6px"
+      title="Open the server's usbip-bridge view (SSH tunnel on 18098)">
+      ↗ server view
+    </a>`);
+  }
+  document.getElementById('topPills').innerHTML = parts.join('');
+}
+
+function renderFlow() {
+  const s = S.status; if (!s) return;
+  const c = s.client.supervisor_active;
+  const t = s.tunnel.detected;
+  const r = s.remote_daemon.reachable;
+
+  const svg = {
+    server: '<rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>',
+    link:   '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+    usb:    '<circle cx="12" cy="17" r="2.5"/><path d="M12 14.5V5"/><path d="M9 7l3-3 3 3"/><path d="M8 11h8"/>',
+    monitor:'<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>',
+  };
+  const node = (ic, label, name, state) => `
+    <div class="flow-n ${state}">
+      <div class="fi"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${svg[ic]}</svg></div>
+      <div><div class="fl">${esc(label)}</div><div class="fn">${esc(name)}</div></div>
+    </div>`;
+  const link = (state, label) => `<div class="flow-l ${state === 'on' ? 'on' : ''}">${label ? `<span class="lb">${esc(label)}</span>` : ''}</div>`;
+
+  let html;
+  if (s.topology === 'tunnel' || s.topology === 'tunnel-only') {
+    html = [
+      node('server', 'remote', 'usbipd :3240', r ? 'on' : 'off'),
+      link(r, 'ssh -L'),
+      node('link', 'tunnel', '127.0.0.1:3240', t ? 'on' : 'warn'),
+      link(t, 'loopback'),
+      node('monitor', 'client', 'vhci_hcd', c ? 'on' : 'off'),
+    ].join('');
+  } else if (s.topology === 'direct') {
+    html = [
+      node('server', 'remote', (s.config.CLI_SERVERS || [])[0] || '—', r ? 'on' : 'off'),
+      link(r, 'tcp'),
+      node('usb', 'client', 'vhci_hcd', c ? 'on' : 'off'),
+    ].join('');
+  } else if (s.topology === 'server') {
+    html = [
+      node('usb', 'local', 'USB device', 'on'),
+      link(s.server_local.usbipd_running, 'usbip bind'),
+      node('server', 'daemon', 'usbipd :3240', s.server_local.usbipd_running ? 'on' : 'off'),
+    ].join('');
+  } else {
+    html = [
+      node('monitor', 'client', 'not running', 'off'),
+      link(false, ''),
+      node('link', 'tunnel', t ? '127.0.0.1:3240' : 'not listening', t ? 'warn' : 'off'),
+      link(t, ''),
+      node('server', 'remote', r ? 'reachable' : 'unreachable', r ? 'on' : 'off'),
+    ].join('');
+  }
+  document.getElementById('flow').innerHTML = html;
+
+  const pill = document.getElementById('topoPill');
+  pill.className = 'pill ' + (s.topology === 'tunnel' ? 'ok' :
+                              s.topology === 'direct' ? 'acc' :
+                              s.topology === 'server' ? 'ok' :
+                              s.topology === 'unknown' ? 'err' : 'warn');
+  pill.innerHTML = `<span class="dot"></span>${esc(s.topology)}`;
+
+  const detail = document.getElementById('topoDetail');
+  if (s.topology === 'tunnel') {
+    detail.innerHTML = `client → <span class="kbd">127.0.0.1:${s.tunnel.port}</span> → ssh tunnel → remote usbipd`;
+  } else if (s.topology === 'direct') {
+    detail.innerHTML = `client → <span class="kbd">${(s.config.CLI_SERVERS || [])[0]}:${s.config.CLI_TCP_PORT || 3240}</span> → remote usbipd`;
+  } else if (s.topology === 'server') {
+    detail.innerHTML = `local usbipd exports USB devices · client attaches them from another machine`;
+  } else {
+    detail.innerHTML = `nothing is running — start <span class="kbd">usbip-client.service</span> + <span class="kbd">usbip-tunnel.service</span>`;
+  }
+}
+
+/* ============================================================================
+   VHCI
+   ========================================================================== */
+function renderVhci() {
+  const wrap1 = document.getElementById('vhciWrap');
+  const wrap2 = document.getElementById('vhciWrap2');
+  const pill1 = document.getElementById('vhciPill');
+  const pill2 = document.getElementById('vhciPill2');
+  const vhci = S.vhci;
+
+  [pill1, pill2].forEach(p => {
+    if (!p) return;
+    p.className = 'pill ' + (vhci.length ? 'ok' : '');
+    p.innerHTML = `<span class="dot"></span>${vhci.length} active`;
+  });
+
+  if (!vhci.length) {
+    const empty = `<div class="empty">
+      <div class="eico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></svg></div>
+      <div class="et">No active VHCI ports</div>
+      <div class="ed">attach a remote device to populate this table</div>
+    </div>`;
+    if (wrap1) wrap1.innerHTML = empty;
+    if (wrap2) wrap2.innerHTML = empty;
+    return;
+  }
+
+  const rows = vhci.map(p => `
+    <tr>
+      <td>${esc(p.hub)}</td><td>${String(p.port).padStart(4, '0')}</td>
+      <td>${esc(p.sta)}</td><td>${esc(p.spd)}</td><td>${esc(p.dev)}</td>
+      <td>${esc(p.sockfd)}</td><td style="color:var(--acc);font-weight:700">${esc(p.busid)}</td>
+      <td><button class="btn sm err" onclick="detachDevice(${p.port})">Detach</button></td>
+    </tr>`).join('');
+  const html = `<div class="tbl-wrap" style="border:none;border-radius:0">
+    <table class="tbl"><thead><tr>
+      <th>hub</th><th>port</th><th>sta</th><th>spd</th><th>dev</th><th>sockfd</th><th>busid</th><th></th>
+    </tr></thead><tbody>${rows}</tbody></table></div>`;
+  if (wrap1) wrap1.innerHTML = html;
+  if (wrap2) wrap2.innerHTML = html;
+}
+
+/* ============================================================================
+   Status fetch
+   ========================================================================== */
+async function refreshStatus() {
+  try {
+    const s = await api('/api/status');
+    S.status = s;
+    S.units = s.units || {};
+    S.conf = s.config || {};
+    S.confMeta = s.conf_meta || {};
+    S.attached = (s.ports && s.ports.attached) || [];
+    S.vhci = (s.ports && s.ports.vhci) || [];
+    renderTopPills();
+    renderStats();
+    renderConnection();
+    renderFlow();
+    renderVhci();
+    renderTabCounts();
+  } catch (e) {
+    addLog('status error: ' + e.message, 'err');
+    toast('Cannot reach bridge', e.message, 'err');
+  }
+}
+
+function renderTabCounts() {
+  const el = document.getElementById('tabDevCount');
+  if (el) el.textContent = String(S.local.length + S.remote.length + S.attached.length);
+}
+
+/* ============================================================================
+   Devices
+   ========================================================================== */
+async function refreshLocal() {
+  try {
+    S.local = await api('/api/devices/local') || [];
+    renderLocal(); renderTabCounts();
+  } catch (e) { addLog('local: ' + e.message, 'err'); }
+}
+async function refreshRemote() {
+  const host = document.getElementById('remoteHost').value;
+  if (!host) return;
+  try {
+    S.remote = await api('/api/devices/remote?host=' + encodeURIComponent(host)) || [];
+    renderRemote(); renderTabCounts();
+  } catch (e) { addLog('remote: ' + e.message, 'err'); }
+}
+
+function renderLocal() {
+  const wrap = document.getElementById('localList');
+  if (!S.local.length) {
+    wrap.innerHTML = '<div class="empty"><div class="eico">🔍</div><div class="et">No local USB devices</div><div class="ed">usbip list -l returned nothing</div></div>';
+    return;
+  }
+  wrap.innerHTML = S.local.map(d => `
+    <div class="dev">
+      <div class="dev-ico ${d.exported ? 'ok' : ''}">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="17" r="2.5"/><path d="M12 14.5V5"/><path d="M9 7l3-3 3 3"/><path d="M8 11h8"/></svg>
+      </div>
+      <div class="dev-main">
+        <div class="dev-top"><span class="dev-busid">${esc(d.busid)}</span>
+          ${d.exported ? '<span class="pill ok" style="padding:1px 7px;font-size:9.5px"><span class="dot"></span>exported</span>' : ''}
+        </div>
+        <div class="dev-name">${esc(d.vendor || 'Unknown')} ${esc(d.product || '')}</div>
+        <div class="dev-meta">${esc(d.vid)}:${esc(d.pid)}</div>
+      </div>
+      <div class="dev-actions">
+        ${d.exported
+          ? `<button class="btn sm err" onclick="unbindDevice('${esc(d.busid)}')">Unexport</button>`
+          : `<button class="btn sm ok" onclick="bindDevice('${esc(d.busid)}')">Export</button>`}
+      </div>
+    </div>`).join('');
+}
+
+function renderRemote() {
+  const wrap = document.getElementById('remoteList');
+  if (!S.remote.length) {
+    wrap.innerHTML = '<div class="empty"><div class="eico">🔍</div><div class="et">No remote devices</div><div class="ed">usbip list -r returned nothing</div></div>';
+    return;
+  }
+  const attached = new Set(S.attached.map(a => a.busid));
+  wrap.innerHTML = S.remote.map(d => `
+    <div class="dev">
+      <div class="dev-ico">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="17" r="2.5"/><path d="M12 14.5V5"/><path d="M9 7l3-3 3 3"/><path d="M8 11h8"/></svg>
+      </div>
+      <div class="dev-main">
+        <div class="dev-top"><span class="dev-busid">${esc(d.busid)}</span>
+          ${attached.has(d.busid) ? '<span class="pill ok" style="padding:1px 7px;font-size:9.5px"><span class="dot"></span>attached</span>' : ''}
+        </div>
+        <div class="dev-name">${esc(d.vendor || '')} ${esc(d.product || '')}</div>
+        <div class="dev-meta">${esc(d.vid)}:${esc(d.pid)}</div>
+      </div>
+      <div class="dev-actions">
+        <button class="btn sm pri" onclick="attachDevice('${esc(d.busid)}')">Attach</button>
+      </div>
+    </div>`).join('');
+}
+
+async function bindDevice(busid) {
+  try {
+    await api('/api/bind', {method:'POST', body: JSON.stringify({busid})});
+    toast(`Exported ${busid}`, '', 'ok'); addLog(`bind ${busid}`, 'ok'); refreshStatus(); refreshLocal();
+  } catch (e) { toast('Bind failed', e.message, 'err'); addLog('bind: ' + e.message, 'err'); }
+}
+async function unbindDevice(busid) {
+  try {
+    await api('/api/unbind', {method:'POST', body: JSON.stringify({busid})});
+    toast(`Unexported ${busid}`, '', 'ok'); addLog(`unbind ${busid}`, 'ok'); refreshStatus(); refreshLocal();
+  } catch (e) { toast('Unbind failed', e.message, 'err'); addLog('unbind: ' + e.message, 'err'); }
+}
+async function attachDevice(busid) {
+  const host = document.getElementById('remoteHost').value;
+  if (!host) return;
+  try {
+    await api('/api/attach', {method:'POST', body: JSON.stringify({host, busid})});
+    toast(`Attached ${busid}`, `from ${host}`, 'ok'); addLog(`attach ${host}/${busid}`, 'ok');
+    refreshStatus(); refreshRemote();
+  } catch (e) { toast('Attach failed', e.message, 'err'); addLog('attach: ' + e.message, 'err'); }
+}
+async function detachDevice(port) {
+  try {
+    await api('/api/detach', {method:'POST', body: JSON.stringify({port})});
+    toast(`Detached port ${port}`, '', 'ok'); addLog(`detach port ${port}`, 'ok');
+    refreshStatus();
+  } catch (e) { toast('Detach failed', e.message, 'err'); addLog('detach: ' + e.message, 'err'); }
+}
+
+/* ============================================================================
+   Units
+   ========================================================================== */
+async function refreshUnits() {
+  try {
+    S.units = {}; (await api('/api/units')).forEach(u => S.units[u.unit] = u);
+    renderUnits(); renderTopPills();
+  } catch (e) { addLog('units: ' + e.message, 'err'); }
+}
+function renderUnits() {
+  const order = ['usbip-client.service','usbip-tunnel.service','usbip-tunnel-firewall.service','usbip-server.service'];
+  const descriptions = {
+    'usbip-client.service': 'usbipctl client — attaches remote USB devices',
+    'usbip-server.service': 'usbipctl server — exports local USB devices',
+    'usbip-tunnel.service': 'ssh -N -L — forwards 3240 to the remote daemon',
+    'usbip-tunnel-firewall.service': 'iptables guard — only lo:3240 open',
+  };
+  document.getElementById('unitsWrap').innerHTML = order.map(name => {
+    const u = S.units[name] || {};
+    const active = u.active === 'active';
+    const enabled = u.enabled === 'enabled';
+    return `<div class="unit">
+      <div class="unit-head">
+        <span class="unit-name">${esc(name)}</span>
+        <span class="pill ${active ? 'ok' : ''}" style="font-size:10px;padding:2px 8px"><span class="dot"></span>${esc(u.active || 'unknown')}</span>
+        <span class="pill ${enabled ? 'acc' : ''}" style="font-size:10px;padding:2px 8px"><span class="dot"></span>${esc(u.enabled || 'unknown')}</span>
+      </div>
+      <div class="unit-desc">${esc(descriptions[name] || '')}</div>
+      <div class="unit-acts">
+        <button class="btn sm pri" onclick="unitAction('${name}','start')" ${active ? 'disabled' : ''}>Start</button>
+        <button class="btn sm err" onclick="unitAction('${name}','stop')" ${!active ? 'disabled' : ''}>Stop</button>
+        <button class="btn sm" onclick="unitAction('${name}','restart')">Restart</button>
+        <button class="btn sm ok" onclick="unitAction('${name}','enable')" ${enabled ? 'disabled' : ''}>Enable</button>
+        <button class="btn sm" onclick="unitAction('${name}','disable')" ${!enabled ? 'disabled' : ''}>Disable</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function unitAction(unit, action) {
+  try {
+    await api(`/api/units/${encodeURIComponent(unit)}/${action}`, {method:'POST'});
+    toast(`${action} ${unit}`, '', 'ok'); addLog(`systemctl ${action} ${unit}`, 'ok');
+    await refreshUnits(); await refreshStatus();
+  } catch (e) { toast(`${action} failed`, e.message, 'err'); addLog(`systemctl ${action} ${unit}: ${e.message}`, 'err'); }
+}
+async function refreshJournal() {
+  const unit = document.getElementById('journalUnit').value;
+  try {
+    const lines = await api(`/api/logs?unit=${encodeURIComponent(unit)}&n=300`);
+    const el = document.getElementById('journalLog');
+    if (!lines.length) { el.innerHTML = '<span class="dim">no journal entries</span>'; return; }
+    el.innerHTML = lines.map(l => `<div><span class="t">${esc(l.ts)}</span> ${esc(l.msg)}</div>`).join('');
+    el.scrollTop = el.scrollHeight;
+  } catch (e) { toast('Journal failed', e.message, 'err'); }
+}
+
+/* ============================================================================
+   Diagnose
+   ========================================================================== */
+async function runDiagnose() {
+  const wrap = document.getElementById('diagnoseResult');
+  wrap.innerHTML = '<div class="empty"><div class="ed">running…</div></div>';
+  try {
+    const r = await api('/api/diagnose');
+    const checks = r.checks || [];
+    wrap.innerHTML = `<div class="tbl-wrap" style="border:none">
+      <table class="tbl"><thead><tr>
+        <th style="width:22%">check</th><th style="width:8%">status</th><th>detail</th>
+      </tr></thead><tbody>
+        ${checks.map(c => {
+          const cls = c.ok ? 'ok' : (c.severity === 'warn' ? 'warn' : 'err');
+          const dot = c.ok ? '●' : '✕';
+          const color = c.ok ? 'var(--ok)' : (c.severity === 'warn' ? 'var(--warn)' : 'var(--err)');
+          return `<tr>
+            <td class="mono-strong">${esc(c.name)}</td>
+            <td style="color:${color};font-weight:700">${dot}</td>
+            <td style="color:var(--dim)">${esc(c.detail)}</td>
+          </tr>`;
+        }).join('')}
+      </tbody></table></div>`;
+  } catch (e) {
+    wrap.innerHTML = `<div class="banner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>${esc(e.message)}</span></div>`;
+  }
+}
+
+/* ============================================================================
+   Config (same as before, unchanged)
+   ========================================================================== */
+function renderConfForm() {
+  const wrap = document.getElementById('confForm');
+  wrap.innerHTML = GROUPS.map(g => {
+    const items = FIELDS.filter(f => f.group === g).map(renderField).join('');
+    return `<div class="form-group"><div class="form-group-title">${esc(g)}</div>${items}</div>`;
+  }).join('');
+}
+function renderField(f) {
+  const id = 'f_' + f.key;
+  const v = fieldValue(f.key);
+  const label = `<label><code>${esc(f.key)}</code></label>`;
+  const hint = `<div class="hint">${esc(f.hint)}</div>`;
+  let input;
+  if (f.type === 'flag') {
+    input = `<div class="trow" style="padding:4px 0;border:0">
+      <span class="dim mono" style="font-size:11px">${v ? '1 — enabled' : '0 — disabled'}</span>
+      <button type="button" class="toggle ${v ? 'on' : ''}" id="${id}" data-key="${f.key}" data-type="flag"></button></div>`;
+  } else if (f.type === 'array') {
+    const txt = (Array.isArray(v) ? v : []).join(', ');
+    input = `<input class="input" id="${id}" data-key="${f.key}" data-type="array" value="${esc(txt)}" placeholder="busid1, busid2  (empty = all)">`;
+  } else if (f.type === 'int') {
+    input = `<input class="input" id="${id}" data-key="${f.key}" data-type="int" type="number" value="${esc(v)}">`;
+  } else {
+    input = `<input class="input" id="${id}" data-key="${f.key}" data-type="text" value="${esc(v)}">`;
+  }
+  return `<div class="field">${label}${input}${hint}</div>`;
+}
+function collectConf() {
+  const out = {};
+  FIELDS.forEach(f => {
+    const el = document.getElementById('f_' + f.key); if (!el) return;
+    if (f.type === 'flag') out[f.key] = el.classList.contains('on') ? 1 : 0;
+    else if (f.type === 'array') out[f.key] = el.value.split(',').map(s => s.trim()).filter(Boolean);
+    else if (f.type === 'int') out[f.key] = parseInt(el.value, 10) || 0;
+    else out[f.key] = el.value;
+  });
+  return out;
+}
+function composeConf(v) {
+  const q = s => '"' + String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+  const arr = items => items.length ? '(' + items.map(q).join(' ') + ')' : '()';
+  return [
+    '# /etc/usbip/usbip.conf  —  must be root-owned, 640/600',
+    '',
+    '# ========== General ==========',
+    `LOG_FACILITY=${v.LOG_FACILITY}`,
+    `NOTIFY_ENABLED=${v.NOTIFY_ENABLED}`,
+    '',
+    '# ========== SERVER section ==========',
+    `SRV_INTERVAL=${v.SRV_INTERVAL}`,
+    `SRV_EXPORT_ONLY=${arr(v.SRV_EXPORT_ONLY)}`,
+    `SRV_UNBIND_ON_STOP=${v.SRV_UNBIND_ON_STOP}`,
+    `SRV_USBIPD_OPTS=${q(v.SRV_USBIPD_OPTS)}`,
+    '',
+    '# ========== CLIENT section ==========',
+    `CLI_INTERVAL=${v.CLI_INTERVAL}`,
+    `CLI_SERVERS=${arr(v.CLI_SERVERS)}`,
+    `CLI_TCP_PORT=${v.CLI_TCP_PORT}`,
+    `CLI_DEVICES=${arr(v.CLI_DEVICES)}`,
+    `CLI_DETACH_ON_REMOVE=${v.CLI_DETACH_ON_REMOVE}`,
+    `CLI_DETACH_ON_STOP=${v.CLI_DETACH_ON_STOP}`,
+    `CLI_LIST_TIMEOUT=${v.CLI_LIST_TIMEOUT}`,
+    '',
+  ].join('\n');
+}
+function highlightConf(text) {
+  return esc(text).split('\n').map(line => {
+    if (/^\s*#/.test(line)) return `<span class="c-c">${line}</span>`;
+    const m = line.match(/^([A-Z_]+)=(.*)$/);
+    if (m) return `<span class="c-k">${m[1]}</span>=<span class="c-v">${m[2]}</span>`;
+    return line;
+  }).join('\n');
+}
+function updateConfPreview() {
+  document.getElementById('confPreview').innerHTML = highlightConf(composeConf(collectConf()));
+}
+function attachFormListeners() {
+  document.querySelectorAll('#confForm .toggle').forEach(t => {
+    t.addEventListener('click', () => {
+      t.classList.toggle('on');
+      const span = t.previousElementSibling;
+      if (span) span.textContent = t.classList.contains('on') ? '1 — enabled' : '0 — disabled';
+      updateConfPreview();
+    });
+  });
+  document.querySelectorAll('#confForm input').forEach(i => i.addEventListener('input', updateConfPreview));
+}
+async function reloadConfig() {
+  try {
+    const c = await api('/api/config');
+    S.conf = c.values || {}; S.confMeta = c.meta || {};
+    renderConfForm(); attachFormListeners(); updateConfPreview(); renderConfigMeta();
+  } catch (e) { toast('Failed to load config', e.message, 'err'); }
+}
+function renderConfigMeta() {
+  const m = S.confMeta;
+  const pill = document.getElementById('confMetaPill');
+  const banner = document.getElementById('configBanner');
+  const ok = m.exists && m.root_owned && m.safe_mode;
+  pill.className = 'pill ' + (ok ? 'ok' : 'err');
+  pill.innerHTML = `<span class="dot"></span>${ok ? 'writable' : 'read-only'}`;
+  if (!m.exists) {
+    banner.innerHTML = `<div class="banner">config file ${esc(m.path)} does not exist — create it (root:root 0640)</div>`;
+  } else if (!m.root_owned) {
+    banner.innerHTML = `<div class="banner">config must be owned by root (currently uid ${m.owner})</div>`;
+  } else if (!m.safe_mode) {
+    banner.innerHTML = `<div class="banner">config mode is ${m.mode} — must be 0640 or 0600</div>`;
+  } else { banner.innerHTML = ''; }
+}
+async function saveConfig() {
+  try {
+    await api('/api/config', {method:'PUT', body: JSON.stringify(collectConf())});
+    toast('Config saved', '/etc/usbip/usbip.conf', 'ok');
+    addLog('config saved', 'ok');
+    await reloadConfig(); await refreshStatus();
+  } catch (e) { toast('Save failed', e.message, 'err'); addLog('save: ' + e.message, 'err'); }
+}
+
+/* ============================================================================
+   Commands
+   ========================================================================== */
+function renderCommands() {
+  const s = S.status;
+  const conf = S.conf;
+  const servers = (conf.CLI_SERVERS || ['127.0.0.1']);
+  const server0 = servers[0] || '127.0.0.1';
+  const port = conf.CLI_TCP_PORT || 3240;
+  const isTunnel = (s && s.topology === 'tunnel') || server0 === '127.0.0.1';
+
+  const groups = [
+    {
+      title: 'Supervisor (usbipctl)',
+      sub: 'the bash loop that owns bind/attach',
+      rows: [
+        { label: 'Start server supervisor', cmd: 'sudo usbipctl server --config /etc/usbip/usbip.conf' },
+        { label: 'Stop server supervisor',  cmd: 'sudo usbipctl server --stop' },
+        { label: 'Start client supervisor', cmd: 'sudo usbipctl client --config /etc/usbip/usbip.conf' },
+        { label: 'Stop client supervisor',  cmd: 'sudo usbipctl client --stop' },
+      ],
+    },
+    {
+      title: 'systemd',
+      sub: 'same four units as the repo',
+      rows: [
+        { label: 'Enable + start client', cmd: 'sudo systemctl enable --now usbip-client.service' },
+        { label: 'Enable + start tunnel', cmd: 'sudo systemctl enable --now usbip-tunnel.service' },
+        { label: 'Enable + start server', cmd: 'sudo systemctl enable --now usbip-server.service' },
+        { label: 'Follow client logs',    cmd: 'journalctl -u usbip-client.service -f' },
+        { label: 'Follow tunnel logs',    cmd: 'journalctl -u usbip-tunnel.service -f' },
+      ],
+    },
+  ];
+
+  if (isTunnel) {
+    groups.push({
+      title: 'SSH tunnel',
+      sub: 'what usbip-tunnel.service runs',
+      rows: [
+        { label: 'Start tunnel manually', cmd: `ssh -N -L 127.0.0.1:${port}:127.0.0.1:3240 -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 usbip-tunnel@<REMOTE_IP>` },
+        { label: 'Check listening socket', cmd: `ss -ltnp 'sport = :${port}'` },
+        { label: 'Test remote daemon', cmd: 'usbip list -r 127.0.0.1' },
+      ],
+    });
+  }
+
+  groups.push({
+    title: 'usbip CLI',
+    sub: 'one-shot, outside the supervisor',
+    rows: [
+      { label: 'Load modules (client)', cmd: 'sudo modprobe usbip-core vhci-hcd' },
+      { label: 'Load modules (server)', cmd: 'sudo modprobe usbip-core usbip-host' },
+      { label: 'Start daemon',          cmd: `sudo usbipd -D ${conf.SRV_USBIPD_OPTS || ''}`.trim() },
+      { label: 'List local',            cmd: 'usbip list -l' },
+      { label: 'List remote',           cmd: `usbip list -r ${server0}` },
+      { label: 'Attach remote device',  cmd: `sudo usbip attach -r ${server0} -b ${(S.remote[0] || {}).busid || '3-2'}` },
+      { label: 'Bind local device',     cmd: `sudo usbip bind -b ${(S.local[0] || {}).busid || '3-2'}` },
+      { label: 'Show ports',            cmd: 'usbip port' },
+      { label: 'Detach port 0',         cmd: 'sudo usbip detach -p 0' },
+    ],
+  });
+
+  document.getElementById('cmdGrid').innerHTML = groups.map(g => `
+    <div class="card">
+      <h2>
+        <span class="hico"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></span>
+        <span>${esc(g.title)}</span><span class="hsp"></span>
+        <span class="mono dim" style="font-size:9.5px;text-transform:none">${esc(g.sub)}</span>
+      </h2>
+      <div class="body">
+        ${g.rows.map((r, i) => {
+          const id = 'cmd_' + g.title.replace(/\W/g, '') + '_' + i;
+          return `<div style="margin-bottom:10px">
+            <div style="font:10px var(--mono);color:var(--muted);margin-bottom:4px">${esc(r.label)}</div>
+            <div class="code-wrap">
+              <div class="code" id="${id}">${esc(r.cmd)}</div>
+              <button class="btn sm copy" onclick="copyEl('${id}')">⧉</button>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`).join('');
+}
+
+/* ============================================================================
+   Logs
+   ========================================================================== */
+function addLog(msg, kind = 'info') {
+  const t = new Date().toLocaleTimeString('zh-CN', {hour12: false});
+  S.logs.push({t, msg, kind});
+  if (S.logs.length > 200) S.logs.shift();
+  const el = document.getElementById('log'); if (!el) return;
+  el.innerHTML = S.logs.map(l =>
+    `<div><span class="t">[${l.t}]</span> <span class="${l.kind}">${esc(l.msg)}</span></div>`).join('');
+  el.scrollTop = el.scrollHeight;
+}
+function clearLog() { S.logs = []; document.getElementById('log').innerHTML = '<span class="dim">— cleared —</span>'; }
+
+/* ============================================================================
+   SSE
+   ========================================================================== */
+function connectSSE() {
+  const es = new EventSource('/api/events');
+  const pill = document.getElementById('ssePill');
+  es.onopen = () => {
+    S.sseOk = true;
+    pill.className = 'pill ok'; pill.innerHTML = '<span class="dot"></span>SSE live';
+    addLog('SSE connected', 'info');
+  };
+  es.onerror = () => {
+    S.sseOk = false;
+    pill.className = 'pill err'; pill.innerHTML = '<span class="dot"></span>SSE offline';
+    addLog('SSE disconnected, retrying…', 'warn');
+  };
+  es.onmessage = ev => {
+    try {
+      const d = JSON.parse(ev.data);
+
+      // Cheap status keys — 2 s cadence
+      if (['overall_health','topology','client','tunnel','remote_daemon','server_local','ports'].includes(d.type)) {
+        if (S.status) {
+          if (d.type === 'ports') {
+            S.attached = d.data.attached || [];
+            S.vhci     = d.data.vhci     || [];
+          } else {
+            S.status[d.type] = d.data;
+          }
+          renderTopPills(); renderStats(); renderConnection(); renderFlow(); renderVhci();
+        }
+      }
+
+      // Heavier device / unit keys — 8 s cadence
+      if (d.type === 'local') {
+        S.local = d.data || [];
+        renderLocal(); renderTabCounts();
+        // refresh form's SRV_EXPORT_ONLY hints on devices tab only
+      }
+      if (d.type === 'remote') {
+        if (d.data && d.data.reachable) {
+          S.remote = d.data.devices || [];
+          renderRemote(); renderTabCounts();
+        }
+      }
+      if (d.type === 'units') {
+        Object.assign(S.units, d.data);
+        renderUnits(); renderTopPills();
+      }
+
+      // Device event log
+      if (['bind','unbind','attach','detach'].includes(d.type)) {
+        addLog(`${d.type} ${d.busid || ('port ' + d.port)}`,
+               d.type === 'detach' ? 'warn' : 'ok');
+      }
+    } catch {}
+  };
+}
+
+/* ============================================================================
+   Tabs
+   ========================================================================== */
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel-' + t.dataset.tab).classList.add('active');
+    if (t.dataset.tab === 'devices') { refreshLocal(); refreshRemote(); }
+    if (t.dataset.tab === 'units')   { refreshUnits(); refreshJournal(); }
+    if (t.dataset.tab === 'config')  { renderConfigMeta(); updateConfPreview(); }
+    if (t.dataset.tab === 'commands'){ renderCommands(); }
+    if (t.dataset.tab === 'server') {
+      const f = document.getElementById('serverFrame');
+      if (f && !f.src) f.src = (window.USBIP_PEER_URL || 'http://127.0.0.1:18098/') + location.hash;
+    }
+  });
+});
+
+/* ============================================================================
+   Init
+   ========================================================================== */
+async function init() {
+  try {
+    const v = await api('/api/version');
+    S.bridgeVersion = `${v.name} v${v.version}`;
+    document.getElementById('bridgeVersion').textContent = S.bridgeVersion;
+  } catch {}
+  addLog('connecting to usbip-bridge…', 'info');
+  try {
+    await reloadConfig();
+    await refreshStatus();
+    await refreshUnits();
+    await refreshLocal();
+    // Populate remote-host select
+    const hosts = (S.conf.CLI_SERVERS && S.conf.CLI_SERVERS.length) ? S.conf.CLI_SERVERS : ['127.0.0.1'];
+    document.getElementById('remoteHost').innerHTML = hosts.map(h => `<option value="${esc(h)}">${esc(h)}</option>`).join('');
+    await refreshRemote();
+    connectSSE();
+    addLog('ready', 'ok');
+  } catch (e) {
+    addLog('init failed: ' + e.message, 'err');
+    toast('Bridge unreachable', e.message, 'err');
+  }
+  setInterval(() => { if (!S.sseOk) refreshStatus(); }, 8000);
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

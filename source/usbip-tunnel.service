@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: GPL-3.0
+# Copyright (C) 2026 Samiux
+# Full license text: https://www.gnu.org/licenses/gpl-3.0.txt
+# License overview: https://www.gnu.org/licenses/gpl-3.0.html
+
+[Unit]
+Description=USB/IP SSH tunnel (forward)
+After=network-online.target usbip-tunnel-firewall.service
+Wants=network-online.target
+Requires=usbip-tunnel-firewall.service
+
+[Service]
+Type=simple
+Environment=SERVER_IP=192.168.68.230
+ExecStart=/usr/bin/ssh -N -L 127.0.0.1:3240:127.0.0.1:3240 \
+    -L 127.0.0.1:18098:127.0.0.1:8098 \
+    -o ServerAliveInterval=30 \
+    -o ServerAliveCountMax=3 \
+    -o ExitOnForwardFailure=yes \
+    -o StrictHostKeyChecking=yes \
+    -o UserKnownHostsFile=/var/lib/usbip-tunnel/.ssh/known_hosts \
+    -o BatchMode=yes \
+    usbip-tunnel@${SERVER_IP}
+Restart=always
+RestartSec=5
+User=usbip-tunnel
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-3.0
+# Copyright (C) 2026 Samiux
+# Full license text: https://www.gnu.org/licenses/gpl-3.0.txt
+# License overview: https://www.gnu.org/licenses/gpl-3.0.html
+
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", \
+  RUN+="/bin/systemctl --no-block kill --kill-who=main -s SIGUSR1 usbip-server.service"

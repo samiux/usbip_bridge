@@ -1,1 +1,378 @@
+#!/usr/bin/env bash
 
+# SPDX-License-Identifier: GPL-3.0
+# Copyright (C) 2026 Samiux
+# Full license text: https://www.gnu.org/licenses/gpl-3.0.txt
+# License overview: https://www.gnu.org/licenses/gpl-3.0.html
+
+# /usr/bin/usbipctl
+
+# usbipctl — USB/IP server/client supervisor (GPL-3.0)
+# Usage:
+#   usbipctl server [--config PATH]
+#   usbipctl client [--config PATH]
+#   usbipctl server --stop [--config PATH]
+#   usbipctl client --stop [--config PATH]
+
+set -euo pipefail
+shopt -s inherit_errexit
+
+readonly SCRIPT_NAME="${0##*/}"
+CONF="${USBIP_CONF:-/etc/usbip/usbip.conf}"
+ACTION="${1:-}"
+[[ $# -ge 1 ]] && shift || true
+
+STOP_MODE=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --config)
+            [[ $# -ge 2 ]] || { printf '%s: --config requires an argument\n' "$SCRIPT_NAME" >&2; exit 2; }
+            CONF="$2"; shift 2 ;;
+        --stop)  STOP_MODE=1; shift ;;
+        *) printf '%s: unknown argument %s\n' "$SCRIPT_NAME" "$1" >&2; exit 2 ;;
+    esac
+done
+
+# ---------- Logging & notifications ----------
+ROLE="${ACTION:-init}"
+LOG_FACILITY="daemon.info"
+NOTIFY_ENABLED=1
+
+log() {
+    printf 'usbip-%s: %s\n' "$ROLE" "$*" >&2
+    logger -t "usbip-${ROLE}" -p "${LOG_FACILITY}" -- "$*" 2>/dev/null || true
+}
+
+notify() {
+    [[ "${NOTIFY_ENABLED:-1}" == 1 ]] || return 0
+    command -v systemd-notify >/dev/null 2>&1 || return 0
+    systemd-notify "$@" 2>/dev/null || true
+}
+fatal() { log "FATAL: $*"; exit 1; }
+
+# ---------- Config loading (permission check before source) ----------
+load_config() {
+    [[ -r "$CONF" ]] || fatal "config not readable: $CONF"
+    local owner mode
+    owner=$(stat -c '%U' "$CONF")
+    mode=$(stat -c '%a' "$CONF")
+    [[ "$owner" == "root" ]] || fatal "config must be owned by root (currently: $owner)"
+    (( 8#$mode & 8#022 )) && fatal "config must not be group/world writable (currently: $mode)"
+    # shellcheck disable=SC1090
+    source "$CONF"
+    [[ "${LOG_FACILITY:-}" =~ ^[a-z]+\.[a-z]+$ ]] || LOG_FACILITY="daemon.info"
+    [[ "${NOTIFY_ENABLED:-1}" =~ ^[01]$ ]] || NOTIFY_ENABLED=1
+}
+
+# ---------- Common utilities ----------
+in_list() {
+    local needle=$1; shift
+    local item
+    for item in "$@"; do [[ "$item" == "$needle" ]] && return 0; done
+    return 1
+}
+
+start_usbipd() {
+    pgrep -x usbipd >/dev/null 2>&1 && return 0
+    local opts=()
+    [[ -n "${USBIPD_OPTS:-}" ]] && read -ra opts <<< "$USBIPD_OPTS"
+    usbipd -D "${opts[@]}" || { log "usbipd failed to start"; return 1; }
+    log "usbipd started"
+}
+
+# ============================================================
+# SERVER
+# ============================================================
+server_init() {
+    ROLE=server
+    INTERVAL=${SRV_INTERVAL:-3}
+    EXPORT_ONLY=("${SRV_EXPORT_ONLY[@]:-}")
+    UNBIND_ON_STOP=${SRV_UNBIND_ON_STOP:-1}
+    USBIPD_OPTS=${SRV_USBIPD_OPTS:-}
+
+    [[ -n "${CLI_SERVERS[*]:-}" ]] && log "note: server role ignores CLI_* config"
+
+    command -v usbipd >/dev/null || fatal "usbipd not found"
+    modprobe usbip_core 2>/dev/null || true
+    modprobe usbip_host 2>/dev/null || fatal "failed to load usbip-host module"
+
+    declare -gA _fail_reported=()
+    trap 'exit 0' TERM INT
+    trap ':' USR1
+}
+
+local_busids() {
+    usbip list -l 2>/dev/null \
+        | sed -n 's/.*busid[[:space:]]\+\([^[:space:]]*\).*/\1/p'
+}
+
+is_exported() {
+    local busid=$1
+    local driver_link="/sys/bus/usb/devices/${busid}/driver"
+    [[ -L "$driver_link" ]] && readlink -f "$driver_link" | grep -q '/usbip-host$'
+}
+
+server_scan_once() {
+    start_usbipd || true
+    local busid
+    while IFS= read -r busid; do
+        [[ -n "$busid" ]] || continue
+        if is_exported "$busid"; then
+            log "device $busid already exported, skipping bind"
+            unset "_fail_reported[$busid]" 2>/dev/null || true
+            continue
+        fi
+        if usbip bind -b "$busid" >/dev/null 2>&1; then
+            log "exported $busid"
+            unset "_fail_reported[$busid]" 2>/dev/null || true
+        elif [[ -z "${_fail_reported[$busid]:-}" ]]; then
+            log "bind failed: $busid (retrying silently)"
+            _fail_reported[$busid]=1
+        fi
+    done < <(local_busids)
+}
+
+server_stop() {
+    [[ "${UNBIND_ON_STOP:-1}" == 1 ]] || return 0
+    local busid
+    while IFS= read -r busid; do
+        [[ -n "$busid" ]] || continue
+        usbip unbind -b "$busid" >/dev/null 2>&1 && log "unbound $busid"
+    done < <(local_busids)
+}
+
+server_poststop() {
+    pkill -x usbipd 2>/dev/null || true
+    local i
+    for i in {1..20}; do
+        pgrep -x usbipd >/dev/null 2>&1 || break
+        sleep 0.1
+    done
+    pkill -9 -x usbipd 2>/dev/null || true
+    modprobe -r usbip_host usbip_core || true
+    modprobe usbip_core 2>/dev/null || true
+    modprobe usbip_host 2>/dev/null || true
+}
+
+# ============================================================
+# CLIENT
+# ============================================================
+client_init() {
+    ROLE=client
+    INTERVAL=${CLI_INTERVAL:-5}
+    SERVERS=("${CLI_SERVERS[@]}")
+    TCP_PORT=${CLI_TCP_PORT:-3240}
+    DEVICES=("${CLI_DEVICES[@]:-}")
+    DETACH_ON_REMOVE=${CLI_DETACH_ON_REMOVE:-1}
+    DETACH_ON_STOP=${CLI_DETACH_ON_STOP:-1}
+    LIST_TIMEOUT=${CLI_LIST_TIMEOUT:-5}
+
+    [[ ${#SERVERS[@]} -gt 0 ]] || fatal "CLI_SERVERS must not be empty"
+    command -v usbip >/dev/null || fatal "usbip not found"
+    modprobe -r vhci_hcd usbip_core usbip_host 2>/dev/null || true
+    modprobe vhci_hcd 2>/dev/null || fatal "failed to load vhci_hcd module"
+    modprobe usbip_core 2>/dev/null || fatal "failed to load usbip_core module"
+    modprobe usbip_host 2>/dev/null || fatal "failed to load usbip_host module"
+
+    declare -gA _fail_reported=()
+    trap 'exit 0' TERM INT
+    trap ':' USR1
+}
+
+vhci_status_file() {
+    local f
+    for f in /sys/devices/platform/vhci_hcd.*/status; do
+        [[ -r "$f" ]] && { printf '%s\n' "$f"; return 0; }
+    done
+    return 1
+}
+
+list_attached() {
+    usbip port 2>/dev/null | awk '
+        /^Port[[:space:]]+[0-9]+:/ { p=$2; sub(":","",p); port=p; next }
+        {
+            for (i=1;i<=NF;i++) if (index($i,"usbip://")) {
+                u=$i; sub(".*usbip://","",u)
+                s=u; sub("/.*","",s)
+                b=u; sub(".*/","",b)
+                printf "%s\t%s\t%s\n", port, s, b; next
+            }
+        }'
+}
+
+dead_ports() {
+    local f
+    f=$(vhci_status_file) || return 0
+    local hub port sta spd dev sock lb
+    while read -r hub port sta spd dev sock lb; do
+        [[ "$hub" == "hub" ]] && continue
+        [[ -n "${port:-}" ]] || continue
+        (( 16#${sta:-0} == 4 )) || continue
+        case "$sock" in *[!0]*) continue ;; esac
+        printf '%d\n' "$((16#$port))"
+    done < "$f"
+}
+
+remote_busids() {
+    local host=$1 out parsed
+    out=$(timeout "${LIST_TIMEOUT}" usbip list -r "$host" 2>/dev/null) || return 1
+    [[ -n "$out" ]] || return 1
+
+    # Try parsable format first (busid=...)
+    parsed=$(printf '%s\n' "$out" | sed -n 's/^busid=\([^#[:space:]]*\).*/\1/p')
+
+    # Fallback: legacy format (indented "3-2: ..." lines)
+    if [[ -z "$parsed" ]]; then
+        parsed=$(printf '%s\n' "$out" \
+            | sed -n 's/^[[:space:]]\+\([0-9][0-9.-]*\):.*/\1/p')
+    fi
+
+    [[ -n "$parsed" ]] || return 1
+    printf '%s\n' "$parsed"
+}
+
+client_scan_once() {
+    # vhci self-heal
+    local out
+    out=$(usbip port 2>&1) || true
+    if [[ "$out" == *"open vhci_driver"* ]]; then
+        modprobe -r vhci_hcd 2>/dev/null || true
+        modprobe vhci_hcd 2>/dev/null || true
+    fi
+
+    # 1) Determine which servers are reachable
+    declare -A reachable=()
+    for host in "${SERVERS[@]}"; do
+        if remote_busids "$host" >/dev/null 2>&1; then
+            log "Server $host is reachable" 
+            reachable["$host:${TCP_PORT}"]=1
+        else
+            log "Server $host is unreachable"
+        fi
+    done
+
+    # 2) Detach every port whose server is unreachable
+    local out
+    while IFS=$'\t' read -r port s b; do
+        [[ -n "$port" ]] || continue
+        [[ -n "${reachable[$s]:-}" ]] && continue
+        if out=$(usbip detach -p "$port" >/dev/null 2>&1); then
+            log "detach port $port successfully"
+        else
+            log "detach port $port failed: ${out:-no output}"
+        fi
+    done < <(list_attached)
+
+    # 3) Build `have` ONLY from ports whose server is reachable.
+    #    This prevents a stuck port from blocking a new attach.
+    declare -A have=()
+    while IFS=$'\t' read -r port s b; do
+        [[ -n "$port" ]] || continue
+        [[ -n "${reachable[$s]:-}" ]] || continue
+        have["$s/$b"]=$port
+    done < <(list_attached)
+
+    local out
+    while IFS= read -r port; do
+        [[ -n "$port" ]] || continue
+        log "detach failed port $port, retrying continuously"
+        if out=$(usbip detach -p "$port" >/dev/null 2>&1); then
+            log "detach port $port successfully"
+        else
+            log "detach port $port failed: ${out:-no output}"
+        fi 
+    done < <(dead_ports)
+
+    local host skey busid
+    for host in "${SERVERS[@]}"; do
+        skey="$host:${TCP_PORT}"
+        local busids
+        if ! busids=$(remote_busids "$host"); then
+            [[ -z "${_fail_reported[list:$host]:-}" ]] && {
+                log "server $host unreachable, retrying continuously"
+                _fail_reported["list:$host"]=1
+            }
+        else
+            log "server $host reachable"
+            unset "_fail_reported[list:$host]" 2>/dev/null || true
+        fi
+
+        while IFS= read -r busid; do
+            [[ -n "$busid" ]] || continue
+            [[ -n "${have[$skey/$busid]:-}" ]] && continue
+
+            local out
+            if out=$(usbip attach -r "$host" -b "$busid" 2>&1); then
+                log "attached $host/$busid"
+                unset "_fail_reported[attach:$host/$busid]" 2>/dev/null || true
+             else
+                log "attach failed $host/$busid: ${out:-no output}"
+                _fail_reported["attach:$host/$busid"]=1
+            fi
+        done <<< "$busids"
+
+        if [[ "${DETACH_ON_REMOVE}" == 1 ]]; then
+            local key out
+            for key in "${!have[@]}"; do
+                s=${key%%/*}; b=${key##*/}
+                [[ "$s" == "$skey" ]] || continue
+                if ! in_list "$b" $busids; then
+                    log "remote device disappeared $skey/$b, detaching port ${have[$key]}"
+                    if out=$(usbip detach -p "${have[$key]}" >/dev/null 2>&1); then
+                        log "detach port ${have[$key]} successfully"
+                    else
+                        log "detach port ${have[$key]} failed: ${out:-no output}" 
+                    fi
+                fi
+            done
+        fi
+    done
+}
+
+client_stop() {
+    [[ "${DETACH_ON_STOP}" == 1 ]] || return 0
+    local port out
+    while IFS= read -r port; do
+        [[ -n "$port" ]] || continue
+        if out=$(usbip detach -p "$port" >/dev/null 2>&1); then
+            log "detach port $port successfully"
+        else
+            log "detach port $port failed: ${out:-<no output>}"
+        fi
+    done < <(usbip port 2>/dev/null | sed -n 's/^Port[[:space:]]\+\([0-9]\+\):.*/\1/p')
+
+    local out
+    out=$(usbip port 2>&1) || true
+    if [[ "$out" == *"open vhci_driver"* ]]; then
+        modprobe -r vhci-hcd usbip_host usbip_core 2>/dev/null || true
+    fi
+}
+
+# ============================================================
+# Main loop
+# ============================================================
+main_loop() {
+    local interval=$1 scan_fn=$2
+    [[ -n "${WATCHDOG_USEC:-}" ]] && notify --ready --status="usbip ${ROLE} running"
+    log "usbip-${ROLE} started, scan interval ${interval}s"
+    while :; do
+        "$scan_fn" || true
+        [[ -n "${WATCHDOG_USEC:-}" ]] && notify WATCHDOG=1
+        sleep "$interval" & wait $! 2>/dev/null || true
+    done
+}
+
+# ============================================================
+# Entry point
+# ============================================================
+case "$ACTION" in
+    server)
+        load_config; server_init
+        (( STOP_MODE )) && { server_stop; server_poststop; exit 0; }
+        main_loop "$INTERVAL" server_scan_once ;;
+    client)
+        load_config; client_init
+        (( STOP_MODE )) && { client_stop; exit 0; }
+        main_loop "$INTERVAL" client_scan_once ;;
+    *) printf 'Usage: %s <server|client> [--config PATH] [--stop]\n' "$SCRIPT_NAME" >&2; exit 2 ;;
+esac

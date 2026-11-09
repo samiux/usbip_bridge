@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: GPL-3.0
+# Copyright (C) 2026 Samiux
+# Full license text: https://www.gnu.org/licenses/gpl-3.0.txt
+# License overview: https://www.gnu.org/licenses/gpl-3.0.html
+
+[Unit]
+Description=USB/IP Agent (FastAPI)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/bin/usbip-bridge.py
+Environment=USBIP_AGENT_BIND=127.0.0.1
+Environment=USBIP_AGENT_PORT=8098
+Environment=USBIP_AGENT_STATIC=/var/lib/usbip-tunnel/static
+Environment=USBIP_AGENT_KNOWN_HOSTS=/var/lib/usbip-tunnel/.ssh/known_hosts
+Restart=on-failure
+RestartSec=3
+
+# --- security hardening ---
+User=usbip-tunnel
+Group=usbip-tunnel
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=no
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_DAC_OVERRIDE
+AmbientCapabilities=CAP_SYS_ADMIN CAP_DAC_OVERRIDE
+StateDirectory=usbip-tunnel
+
+[Install]
+WantedBy=multi-user.target
