@@ -1,4 +1,4 @@
-# USB/IP Bridge (Console)
+# USB/IP Bridge
 
 A self‑hosted control plane for **USB/IP** on Linux. Share USB devices from a **server**, attach them on a **client**, and manage both ends from a **web console** at `http://localhost:8098` — with all USB/IP traffic carried inside an encrypted, key‑only SSH tunnel.
 
