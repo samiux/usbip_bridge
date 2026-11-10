@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
+
 # SPDX-License-Identifier: GPL-3.0
+# Copyright (C) 2026 Samiux
+# Full license text: https://www.gnu.org/licenses/gpl-3.0.txt
+# License overview: https://www.gnu.org/licenses/gpl-3.0.html
+
 """
 gusbip-bridge.py — Tkinter desktop console for USB/IP Bridge.
 
